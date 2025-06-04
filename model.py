@@ -1,9 +1,10 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Text, String
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 import enum
+import uuid
 
 
 # Initialize SQLAlchemy
@@ -37,78 +38,74 @@ class PaymentStatus(enum.Enum):
     CHARGEBACK = 'chargeback'
     ON_HOLD = 'on_hold'
 
-# User model
+# User model (consolidated with Admin functionality)
 class User(db.Model):
     __tablename__ = 'users'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String(255), nullable=False, unique=True)
     password = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.CUSTOMER)
+    permissions = db.Column(db.Text, nullable=True)  # JSON string or comma-separated permissions
     address = db.Column(db.Text, nullable=True)
     city = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    phone = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     orders = db.relationship('Order', back_populates='user', lazy=True)
+    approved_orders = db.relationship('Order', back_populates='approved_by_user', foreign_keys='Order.approved_by', lazy=True)
+    generated_reports = db.relationship('Report', back_populates='generated_by_user', foreign_keys='Report.generated_by_user_id', lazy=True)
+    created_products = db.relationship('Product', foreign_keys='Product.created_by', lazy=True)
 
     def set_password(self, password):
         self.password = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password, password)
+    
+    def is_admin(self):
+        return self.role == UserRole.ADMIN
+    
+    def is_staff(self):
+        return self.role in [UserRole.ADMIN, UserRole.STAFF]
+    
+    def is_customer(self):
+        return self.role == UserRole.CUSTOMER
+    
+    def has_permission(self, permission):
+        """Check if user has a specific permission"""
+        if self.is_admin():
+            return True  # Admins have all permissions
+        if not self.permissions:
+            return False
+        # Assuming permissions are stored as comma-separated string
+        user_permissions = [p.strip() for p in self.permissions.split(',')]
+        return permission in user_permissions
 
     def as_dict(self):
         return {
             "id": self.id,
             "email": self.email,
             "name": self.name,
+            "role": self.role.value,
+            "permissions": self.permissions,
             "address": self.address,
             "city": self.city,
+            "phone": self.phone,
+            "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
-        }
-
-# Admin model
-class Admin(db.Model):
-    __tablename__ = 'admins'
-    
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    email = db.Column(db.String(255), nullable=False, unique=True)
-    password = db.Column(db.String(255), nullable=False)
-    name = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(255), nullable=False, default='admin')
-    permissions = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-
-    # Relationships
-    approved_orders = db.relationship('Order', back_populates='approved_by_admin', lazy=True)
-    generated_reports = db.relationship('Report', back_populates='generated_by_admin', foreign_keys='Report.generated_by_admin_id', lazy=True)
-
-    def set_password(self, password):
-        self.password = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password, password)
-
-    def as_dict(self):
-        return {
-            "id": self.id,
-            "email": self.email,
-            "name": self.name,
-            "role": self.role,
-            "permissions": self.permissions,
-            "created_at": self.created_at.isoformat(),
-            "updated": self.updated.isoformat()
         }
 
 # Category model
 class Category(db.Model):
     __tablename__ = 'categories'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(255), nullable=False, unique=True)
     description = db.Column(db.Text, nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
@@ -129,17 +126,17 @@ class Category(db.Model):
 class Product(db.Model):
     __tablename__ = 'products'
     
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=0)
     image_url = db.Column(db.Text, nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+    category_id = db.Column(String(36), db.ForeignKey('categories.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    created_by = db.Column(db.Integer, nullable=True)
+    created_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
 
     # Relationships
     category = db.relationship('Category', back_populates='products')
@@ -167,7 +164,7 @@ class Product(db.Model):
 class PickupPoint(db.Model):
     __tablename__ = 'pickup_points'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(255), nullable=False)
     location_details = db.Column(db.Text, nullable=True)
     city = db.Column(db.String(255), nullable=True)
@@ -193,8 +190,8 @@ class PickupPoint(db.Model):
 class Order(db.Model):
     __tablename__ = 'orders'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
     order_number = db.Column(db.String(255), nullable=False, unique=True)
     status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     total_amount = db.Column(db.Numeric(10, 2), nullable=False)
@@ -202,16 +199,16 @@ class Order(db.Model):
     customer_phone = db.Column(db.String(255), nullable=False)
     delivery_address = db.Column(db.Text, nullable=True)
     city = db.Column(db.String(255), nullable=True)
-    pickup_point_id = db.Column(db.Integer, db.ForeignKey('pickup_points.id'), nullable=True)
+    pickup_point_id = db.Column(String(36), db.ForeignKey('pickup_points.id'), nullable=True)
     order_notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
-    approved_by = db.Column(db.Integer, db.ForeignKey('admins.id'), nullable=True)
+    approved_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
 
     # Relationships
     user = db.relationship('User', back_populates='orders')
     pickup_point = db.relationship('PickupPoint', back_populates='orders')
-    approved_by_admin = db.relationship('Admin', back_populates='approved_orders')
+    approved_by_user = db.relationship('User', back_populates='approved_orders', foreign_keys=[approved_by])
     order_items = db.relationship('OrderItem', back_populates='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', back_populates='order', lazy=True)
 
@@ -251,9 +248,9 @@ class Order(db.Model):
 class OrderItem(db.Model):
     __tablename__ = 'order_items'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
-    product_id = db.Column(db.BigInteger, db.ForeignKey('products.id'), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = db.Column(String(36), db.ForeignKey('orders.id'), nullable=False)
+    product_id = db.Column(String(36), db.ForeignKey('products.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
     unit_price = db.Column(db.Numeric(10, 2), nullable=False)
     custom_images = db.Column(db.Boolean, default=False, nullable=False)
@@ -285,8 +282,8 @@ class OrderItem(db.Model):
 class Payment(db.Model):
     __tablename__ = 'payments'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_id = db.Column(String(36), db.ForeignKey('orders.id'), nullable=False)
     mpesa_code = db.Column(db.String(255), nullable=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     status = db.Column(db.Enum(PaymentStatus), nullable=False, default=PaymentStatus.PENDING)
@@ -311,9 +308,9 @@ class Payment(db.Model):
 class CustomImage(db.Model):
     __tablename__ = 'custom_images'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    order_item_id = db.Column(db.Integer, db.ForeignKey('order_items.id'), nullable=False)
-    product_id = db.Column(db.BigInteger, db.ForeignKey('products.id'), nullable=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    order_item_id = db.Column(String(36), db.ForeignKey('order_items.id'), nullable=False)
+    product_id = db.Column(String(36), db.ForeignKey('products.id'), nullable=True)
     image_url = db.Column(db.Text, nullable=False)
     image_name = db.Column(db.String(255), nullable=True)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -332,26 +329,11 @@ class CustomImage(db.Model):
             "upload_date": self.upload_date.isoformat()
         }
 
-# Optional: If you want detailed report tracking (uncomment if needed)
-# class ReportOrder(db.Model):
-#     __tablename__ = 'report_orders'
-#     id = db.Column(db.Integer, primary_key=True)
-#     report_id = db.Column(db.Integer, db.ForeignKey('report.id'), nullable=False)
-#     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
-#     included_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# class ReportPayment(db.Model):
-#     __tablename__ = 'report_payments'
-#     id = db.Column(db.Integer, primary_key=True)
-#     report_id = db.Column(db.Integer, db.ForeignKey('report.id'), nullable=False)
-#     payment_id = db.Column(db.Integer, db.ForeignKey('payments.id'), nullable=False)
-#     included_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-# Report model
 class Report(db.Model):
     __tablename__ = 'report'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     report_name = db.Column(db.String(255), nullable=False)
     generated_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     start_date = db.Column(db.DateTime, nullable=True)
@@ -361,9 +343,9 @@ class Report(db.Model):
     total_products_sold = db.Column(db.Integer, nullable=False, default=0)
     
     # Foreign keys for relationships
-    top_selling_category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
-    top_selling_product_id = db.Column(db.BigInteger, db.ForeignKey('products.id'), nullable=True)
-    generated_by_admin_id = db.Column(db.Integer, db.ForeignKey('admins.id'), nullable=True)
+    top_selling_category_id = db.Column(String(36), db.ForeignKey('categories.id'), nullable=True)
+    top_selling_product_id = db.Column(String(36), db.ForeignKey('products.id'), nullable=True)
+    generated_by_user_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
     
     pending_orders = db.Column(db.Integer, nullable=False, default=0)
     complete_orders = db.Column(db.Integer, nullable=False, default=0)
@@ -377,7 +359,7 @@ class Report(db.Model):
     # Relationships
     top_selling_category = db.relationship('Category', foreign_keys=[top_selling_category_id])
     top_selling_product = db.relationship('Product', foreign_keys=[top_selling_product_id])
-    generated_by_admin = db.relationship('Admin', foreign_keys=[generated_by_admin_id])
+    generated_by_user = db.relationship('User', foreign_keys=[generated_by_user_id])
 
     def as_dict(self):
         return {
@@ -396,8 +378,8 @@ class Report(db.Model):
             "pending_orders": self.pending_orders,
             "complete_orders": self.complete_orders,
             "failed_payments": self.failed_payments,
-            "generated_by_admin_id": self.generated_by_admin_id,
-            "generated_by_admin_name": self.generated_by_admin.name if self.generated_by_admin else None,
+            "generated_by_user_id": self.generated_by_user_id,
+            "generated_by_user_name": self.generated_by_user.name if self.generated_by_user else None,
             "summary": self.summary,
             "report_data": self.report_data
         }
