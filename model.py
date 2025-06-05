@@ -215,7 +215,8 @@ class Order(db.Model):
     approved_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
 
     # Relationships
-    user = db.relationship('User', back_populates='orders')
+    user = db.relationship('User', back_populates='orders', foreign_keys=[user_id])
+
     pickup_point = db.relationship('PickupPoint', back_populates='orders')
     approved_by_user = db.relationship('User', back_populates='approved_orders', foreign_keys=[approved_by])
     order_items = db.relationship('OrderItem', back_populates='order', lazy=True, cascade="all, delete-orphan")
