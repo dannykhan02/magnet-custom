@@ -10,7 +10,10 @@ import os
 from model import db 
 
 from flask_cors import CORS
-from auth import auth_bp
+from auth.routes import auth_bp
+from auth.admin import admin_bp
+from auth.oauth import oauth_bp
+from auth.profile import profile_bp 
 
 # Import your other resource registration functions
 from product import register_product_resources
@@ -67,7 +70,13 @@ mail = Mail(app)
 
 
 # Register authentication blueprint
+app.register_blueprint(admin_bp, url_prefix="/auth")
 app.register_blueprint(auth_bp, url_prefix="/auth")
+
+app.register_blueprint(oauth_bp, url_prefix="/auth")
+app.register_blueprint(profile_bp, url_prefix="/auth")
+
+
 
 # Register resources from your other files (using Flask-RESTful Api)
 register_product_resources(api)
