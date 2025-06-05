@@ -23,6 +23,7 @@ from pickup_point import register_pickup_point_resources
 
 # Initialize Flask app
 app = Flask(__name__)
+app.config.from_object(Config)
 
 # Set app configuration
 DATABASE_URL = os.getenv("EXTERNAL_DATABASE_URL")
@@ -30,7 +31,6 @@ if not DATABASE_URL:
     raise ValueError("EXTERNAL_DATABASE_URL environment variable is not set")
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-app.config.from_object(Config)
 
 db.init_app(app)
 app.config['JWT_COOKIE_SECURE'] = True
