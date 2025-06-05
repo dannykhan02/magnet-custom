@@ -72,9 +72,11 @@ def is_valid_phone(phone: str, region="KE") -> bool:
         logger.warning(f"Failed to parse phone number: {phone}")
         return False
 
+
 def validate_password(password: str) -> bool:
     """Password must be at least 8 characters long, contain letters and numbers"""
-    return bool(re.match(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$', password))
+    return bool(re.match(r'^(?=.*[A-Za-z])(?=.*\d).{8,}$', password))
+
 
 def create_user_dict(email, name, phone=None, address=None, county=None, role=None, permissions=None):
     """Create a standardized user dictionary for user creation"""
