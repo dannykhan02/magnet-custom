@@ -57,7 +57,7 @@ Session(app)
 api = Api(app)
 jwt = JWTManager(app)
 
-db.init_app(app)
+
 migrate = Migrate(app, db)
 
 
