@@ -55,8 +55,19 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
-    orders = db.relationship('Order', back_populates='user', lazy=True)
-    approved_orders = db.relationship('Order', back_populates='approved_by_user', foreign_keys='Order.approved_by', lazy=True)
+    orders = db.relationship(
+        'Order',
+        back_populates='user',
+        foreign_keys='Order.user_id',
+        lazy=True
+    )
+
+    approved_orders = db.relationship(
+        'Order',
+        back_populates='approved_by_user',
+        foreign_keys='Order.approved_by',
+        lazy=True
+    )
     generated_reports = db.relationship('Report', back_populates='generated_by_user', foreign_keys='Report.generated_by_user_id', lazy=True)
     created_products = db.relationship('Product', foreign_keys='Product.created_by', lazy=True)
 
