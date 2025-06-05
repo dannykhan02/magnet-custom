@@ -28,14 +28,14 @@ def register():
 
     email = data.get("email", "").strip().lower()
     password = data.get("password", "")
-    name = data.get("name", "").strip()
+    name = data.get("name", "").strip() if data.get("name") else None
     phone = data.get("phone", "").strip() if data.get("phone") else None
     address = data.get("address", "").strip() if data.get("address") else None
     county = data.get("county", "").strip() if data.get("county") else None
 
     # Validation
-    if not email or not password or not name:
-        return jsonify({"msg": "Email, password, and name are required"}), 400
+    if not email or not password:
+        return jsonify({"msg": "Email, password are required"}), 400
 
     if not is_valid_email(email):
         return jsonify({"msg": "Invalid email address"}), 400
