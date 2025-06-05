@@ -62,7 +62,7 @@ migrate = Migrate(app, db)
 
 
 mail = Mail(app)
-Session(app)  
+
 
 
 
