@@ -44,7 +44,7 @@ class User(db.Model):
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String(255), nullable=False, unique=True)
     password = db.Column(db.String(255), nullable=False)
-    name = db.Column(db.String(255), nullable=False)
+    name = db.Column(db.String(255), nullable=True)
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.CUSTOMER)
     permissions = db.Column(db.Text, nullable=True)
     address = db.Column(db.Text, nullable=True)
