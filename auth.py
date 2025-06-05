@@ -203,7 +203,7 @@ def register():
     name = data.get("name", "").strip()
     phone = data.get("phone", "").strip() if data.get("phone") else None
     address = data.get("address", "").strip() if data.get("address") else None
-    city = data.get("city", "").strip() if data.get("city") else None
+    county = data.get("county", "").strip() if data.get("county") else None
 
     if not email or not password or not name:
         return jsonify({"msg": "Email, password, and name are required"}), 400
@@ -231,7 +231,7 @@ def register():
             name=name,
             phone=normalize_phone(phone) if phone else None,
             address=address,
-            city=city,
+            county=county,
             role=UserRole.CUSTOMER,
             is_active=True,
             created_at=datetime.utcnow(),
@@ -317,7 +317,7 @@ def register_staff():
     phone = data.get("phone", "").strip() if data.get("phone") else None
     permissions = data.get("permissions", "").strip() if data.get("permissions") else None
     address = data.get("address", "").strip() if data.get("address") else None
-    city = data.get("city", "").strip() if data.get("city") else None
+    county = data.get("county", "").strip() if data.get("county") else None
 
     if not email or not password or not name:
         return jsonify({"msg": "Email, password, and name are required"}), 400
@@ -344,7 +344,7 @@ def register_staff():
             name=name,
             phone=normalize_phone(phone) if phone else None,
             address=address,
-            city=city,
+            county=county,
             role=UserRole.STAFF,
             permissions=permissions,
             is_active=True,
@@ -519,8 +519,8 @@ def update_profile():
         if 'address' in data:
             user.address = data['address'].strip() if data['address'] else None
 
-        if 'city' in data:
-            user.city = data['city'].strip() if data['city'] else None
+        if 'county' in data:
+            user.county = data['county'].strip() if data['county'] else None
 
         user.updated_at = datetime.utcnow()
         db.session.commit()

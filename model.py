@@ -38,18 +38,17 @@ class PaymentStatus(enum.Enum):
     CHARGEBACK = 'chargeback'
     ON_HOLD = 'on_hold'
 
-# User model (consolidated with Admin functionality)
 class User(db.Model):
     __tablename__ = 'users'
-    
+
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String(255), nullable=False, unique=True)
     password = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     role = db.Column(db.Enum(UserRole), nullable=False, default=UserRole.CUSTOMER)
-    permissions = db.Column(db.Text, nullable=True)  # JSON string or comma-separated permissions
+    permissions = db.Column(db.Text, nullable=True)
     address = db.Column(db.Text, nullable=True)
-    city = db.Column(db.String(255), nullable=True)
+    county = db.Column(db.String(255), nullable=True)  # Changed from city to county
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     phone = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -66,23 +65,22 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password, password)
-    
+
     def is_admin(self):
         return self.role == UserRole.ADMIN
-    
+
     def is_staff(self):
         return self.role in [UserRole.ADMIN, UserRole.STAFF]
-    
+
     def is_customer(self):
         return self.role == UserRole.CUSTOMER
-    
+
     def has_permission(self, permission):
         """Check if user has a specific permission"""
         if self.is_admin():
-            return True  # Admins have all permissions
+            return True
         if not self.permissions:
             return False
-        # Assuming permissions are stored as comma-separated string
         user_permissions = [p.strip() for p in self.permissions.split(',')]
         return permission in user_permissions
 
@@ -94,7 +92,7 @@ class User(db.Model):
             "role": self.role.value,
             "permissions": self.permissions,
             "address": self.address,
-            "city": self.city,
+            "county": self.county,  # Changed from city to county
             "phone": self.phone,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
