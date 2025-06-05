@@ -9,7 +9,7 @@ from config import Config
 import os
 from model import db 
 
-
+from flask_cors import CORS
 from auth import auth_bp
 
 # Import your other resource registration functions
@@ -25,20 +25,41 @@ from pickup_point import register_pickup_point_resources
 app = Flask(__name__)
 
 # Set app configuration
+DATABASE_URL = os.getenv("EXTERNAL_DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("EXTERNAL_DATABASE_URL environment variable is not set")
+
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config.from_object(Config)
-basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'app.db')
+
+db.init_app(app)
+app.config['JWT_COOKIE_SECURE'] = True
+app.config['JWT_TOKEN_LOCATION'] = ['cookies']
+app.config['JWT_ACCESS_COOKIE_NAME'] = 'access_token'
+app.config['JWT_HEADER_NAME'] = 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'
+app.config['JWT_COOKIE_CSRF_PROTECT'] = False
+app.config['JWT_COOKIE_SECURE'] = True
+app.config['JWT_COOKIE_SAMESITE'] = "None"
+app.config['SESSION_TYPE'] = 'sqlalchemy'
+app.config['SESSION_SQLALCHEMY'] = db
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Ensure SESSION_SQLALCHEMY is set to use the existing db instance
-app.config['SESSION_TYPE'] = 'sqlalchemy'  # Store sessions in the database
-app.config['SESSION_SQLALCHEMY'] = db  # Use existing SQLAlchemy instance
 
-# Initialize extensions
+CORS(app,
+     origins=["http://localhost:8080"],
+     supports_credentials=True,
+     expose_headers=["Set-Cookie"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"])
+
+Session(app)
+api = Api(app)
 jwt = JWTManager(app)
+
 db.init_app(app)
 migrate = Migrate(app, db)
-api = Api(app)
+
 
 mail = Mail(app)
 Session(app)  
