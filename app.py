@@ -49,25 +49,29 @@ app.config['SESSION_SQLALCHEMY'] = db
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+# FIXED CORS CONFIGURATION
 CORS(app,
-     origins=["http://localhost:8080"],
+     origins=[
+         "https://magnet12.netlify.app",  # Your production frontend
+         "http://localhost:3000",         # React development server (typical)
+         "http://localhost:5173",         # Vite development server
+         "http://localhost:8080",         # Your original localhost
+         "http://127.0.0.1:3000",        # Alternative localhost format
+         "http://127.0.0.1:5173",        # Alternative localhost format
+         "http://127.0.0.1:8080"         # Alternative localhost format
+     ],
      supports_credentials=True,
      expose_headers=["Set-Cookie"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     allow_headers=["Content-Type", "Authorization"])
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
 
 Session(app)
 api = Api(app)
 jwt = JWTManager(app)
 
-
 migrate = Migrate(app, db)
 
-
 mail = Mail(app)
-
-
-
 
 # Register authentication blueprint
 app.register_blueprint(admin_bp, url_prefix="/auth")
@@ -75,8 +79,6 @@ app.register_blueprint(auth_bp, url_prefix="/auth")
 
 app.register_blueprint(oauth_bp, url_prefix="/auth")
 app.register_blueprint(profile_bp, url_prefix="/auth")
-
-
 
 # Register resources from your other files (using Flask-RESTful Api)
 register_product_resources(api)
