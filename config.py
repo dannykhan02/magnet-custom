@@ -10,7 +10,7 @@ class Config:
     # Google OAuth
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "default-client-id")
     GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "default-client-secret")
-    GOOGLE_REDIRECT_URI = "http://localhost:5000/auth/callback/google"
+    GOOGLE_REDIRECT_URI = "https://magnet-custom.onrender.com/auth/callback/google"
     GOOGLE_DISCOVERY_URL = "https://accounts.google.com/.well-known/openid-configuration"
 
     # Email settings
@@ -25,14 +25,15 @@ class Config:
     )
 
     # Database settings
-    SQLALCHEMY_DATABASE_URI = os.getenv("SQLALCHEMY_DATABASE_URI")
-    SQLALCHEMY_TRACK_MODIFICATIONS = os.getenv("SQLALCHEMY_TRACK_MODIFICATIONS", "False").lower() in ("true", "1")
+    SQLALCHEMY_DATABASE_URI = os.getenv("EXTERNAL_DATABASE_URL")
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 5,
         'max_overflow': 10,
         'pool_timeout': 30,
         'pool_recycle': 1800,
     }
+
 
     # JWT Authentication
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fallback-jwt-secret")
