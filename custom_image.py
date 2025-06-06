@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from PIL import Image
 import base64
 from io import BytesIO
+import cloudinary.uploader
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,75 +20,14 @@ logger = logging.getLogger(__name__)
 # Configuration
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-UPLOAD_FOLDER = 'uploads/custom_images'
-
 def allowed_file(filename):
-    """Check if the uploaded file has an allowed extension."""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def create_upload_folder():
-    """Create upload folder if it doesn't exist."""
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
 
-def validate_image_size(image_file):
-    """Validate image dimensions and file size."""
-    try:
-        # Check file size
-        image_file.seek(0, os.SEEK_END)
-        file_size = image_file.tell()
-        image_file.seek(0)
-        
-        if file_size > MAX_FILE_SIZE:
-            return False, "File size exceeds 5MB limit"
-        
-        # Check if it's a valid image
-        try:
-            img = Image.open(image_file)
-            img.verify()
-            image_file.seek(0)  # Reset file pointer
-            return True, "Valid image"
-        except Exception:
-            return False, "Invalid image file"
-            
-    except Exception as e:
-        logger.error(f"Error validating image: {str(e)}")
-        return False, "Error validating image"
 
-def process_base64_image(base64_data, filename):
-    """Process base64 encoded image data."""
-    try:
-        # Remove data URL prefix if present
-        if base64_data.startswith('data:image'):
-            base64_data = base64_data.split(',')[1]
-        
-        # Decode base64 data
-        image_data = base64.b64decode(base64_data)
-        
-        # Create BytesIO object
-        image_file = BytesIO(image_data)
-        
-        # Validate image
-        is_valid, message = validate_image_size(image_file)
-        if not is_valid:
-            return None, message
-            
-        # Generate unique filename
-        file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else 'jpg'
-        unique_filename = f"{uuid.uuid4().hex}.{file_extension}"
-        file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-        
-        # Save image
-        create_upload_folder()
-        with open(file_path, 'wb') as f:
-            f.write(image_data)
-            
-        return file_path, "Image processed successfully"
-        
-    except Exception as e:
-        logger.error(f"Error processing base64 image: {str(e)}")
-        return None, "Error processing image data"
+
+
+
 
 
 class CustomImageResource(Resource):
@@ -186,31 +126,36 @@ class CustomImageResource(Resource):
             if request.content_type and 'multipart/form-data' in request.content_type:
                 # Handle file upload
                 data = request.form.to_dict()
-                file = request.files.get('image')
+                files = request.files.get('image')
                 
-                if not file:
+                if not files:
                     return {"message": "No image file provided"}, 400
                 
-                if file.filename == '':
+                if files.filename == '':
                     return {"message": "No file selected"}, 400
                 
-                if not allowed_file(file.filename):
-                    return {"message": f"File type not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}, 400
                 
-                # Validate image
-                is_valid, message = validate_image_size(file)
-                if not is_valid:
-                    return {"message": message}, 400
+        
                 
                 # Generate unique filename and save
-                filename = secure_filename(file.filename)
-                unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                create_upload_folder()
-                file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-                file.save(file_path)
-                
-                image_url = file_path
-                image_name = filename
+                image_url = None
+                if 'file' in files:
+                    file = files['file']
+                    if file and file.filename != '':
+                        if not allowed_file(file.filename):
+                            return {"message": "Invalid file type. Allowed types: PNG, JPG, JPEG, GIF, WEBP"}, 400
+                        
+                        try:
+                            upload_result = cloudinary.uploader.upload(
+                                file,
+                                folder="event_images",
+                                resource_type="auto"
+                            )
+                            image_url = upload_result.get('secure_url')
+                        except Exception as e:
+                            logger.error(f"Error uploading event image: {str(e)}")
+                            return {"message": "Failed to upload event image"}, 500
+             
                 
             else:
                 # Handle JSON data with base64 image
@@ -222,10 +167,9 @@ class CustomImageResource(Resource):
                     return {"message": "No image data provided"}, 400
                 
                 image_name = data.get('image_name', 'uploaded_image.jpg')
-                image_url, message = process_base64_image(data['image_data'], image_name)
+                # image_url, message = process_base64_image(data['image_data'], image_name)
                 
-                if not image_url:
-                    return {"message": message}, 400
+                
 
             # Validate required fields
             if 'order_item_id' not in data:
@@ -279,100 +223,8 @@ class CustomImageResource(Resource):
             logger.error(f"Error uploading custom image: {str(e)}")
             return {"error": str(e)}, 500
 
-    @jwt_required()
-    def put(self, image_id):
-        """Update custom image details."""
-        try:
-            current_user_id = get_jwt_identity()
-            user = User.query.get(current_user_id)
-            
-            if not user:
-                return {"message": "User not found"}, 404
-
-            # Get the custom image
-            if user.role == UserRole.ADMIN:
-                custom_image = CustomImage.query.get(image_id)
-            else:
-                # Regular user can only update images for their own orders
-                custom_image = CustomImage.query.join(OrderItem).join(Order).filter(
-                    CustomImage.id == image_id,
-                    Order.user_id == current_user_id
-                ).first()
-
-            if not custom_image:
-                return {"error": "Custom image not found"}, 404
-
-            data = request.get_json()
-            if not data:
-                return {"error": "No data provided"}, 400
-
-            # Update image name
-            if "image_name" in data:
-                custom_image.image_name = data["image_name"]
-
-            # Update product_id (admin only or if not yet assigned)
-            if "product_id" in data:
-                product_id = data.get("product_id")
-                if product_id:
-                    product = Product.query.get(product_id)
-                    if not product:
-                        return {"error": "Product not found"}, 400
-                custom_image.product_id = product_id
-
-            # Replace image (handle both file upload and base64)
-            if request.content_type and 'multipart/form-data' in request.content_type:
-                file = request.files.get('new_image')
-                if file and file.filename != '':
-                    if not allowed_file(file.filename):
-                        return {"error": f"File type not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}, 400
-                    
-                    # Validate new image
-                    is_valid, message = validate_image_size(file)
-                    if not is_valid:
-                        return {"error": message}, 400
-                    
-                    # Delete old image file if it exists
-                    if custom_image.image_url and os.path.exists(custom_image.image_url):
-                        try:
-                            os.remove(custom_image.image_url)
-                        except Exception as e:
-                            logger.warning(f"Could not delete old image file: {str(e)}")
-                    
-                    # Save new image
-                    filename = secure_filename(file.filename)
-                    unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                    create_upload_folder()
-                    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-                    file.save(file_path)
-                    
-                    custom_image.image_url = file_path
-                    custom_image.image_name = filename
-
-            elif "image_data" in data:
-                # Handle base64 image replacement
-                image_name = data.get('image_name', custom_image.image_name or 'updated_image.jpg')
-                new_image_url, message = process_base64_image(data['image_data'], image_name)
-                
-                if not new_image_url:
-                    return {"error": message}, 400
-                
-                # Delete old image file if it exists
-                if custom_image.image_url and os.path.exists(custom_image.image_url):
-                    try:
-                        os.remove(custom_image.image_url)
-                    except Exception as e:
-                        logger.warning(f"Could not delete old image file: {str(e)}")
-                
-                custom_image.image_url = new_image_url
-                custom_image.image_name = image_name
-
-            db.session.commit()
-            return {"message": "Custom image updated successfully", "custom_image": custom_image.as_dict()}, 200
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error updating custom image: {str(e)}")
-            return {"error": f"An error occurred: {str(e)}"}, 500
+ 
+        
 
     @jwt_required()
     def delete(self, image_id):

@@ -22,7 +22,7 @@ from payment import register_payment_resources
 from report import register_report_resources
 from custom_image import register_custom_image_resources
 from pickup_point import register_pickup_point_resources
-
+import cloudinary
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -66,7 +66,11 @@ migrate = Migrate(app, db)
 
 mail = Mail(app)
 
-
+cloudinary.config(
+    cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.getenv('CLOUDINARY_API_KEY'),
+    api_secret=os.getenv('CLOUDINARY_API_SECRET')
+)
 
 
 # Register authentication blueprint
