@@ -243,3 +243,63 @@ def update_user_permissions(user_id):
         db.session.rollback()
         logger.error(f"Error updating user permissions: {str(e)}")
         return jsonify({"msg": "Failed to update user permissions"}), 500
+    
+@admin_bp.route('/register-first-admin', methods=['POST'])
+def register_first_admin():
+    """Register the first admin user - only works when no admin exists"""
+    
+    # Check if any admin users already exist
+    existing_admin = User.query.filter_by(role=UserRole.ADMIN).first()
+    if existing_admin:
+        return jsonify({"msg": "Admin user already exists. Use normal registration process."}), 403
+    
+    data = request.get_json()
+    
+    email = data.get("email", "").strip().lower()
+    phone = data.get("phone_number", "").strip() if data.get("phone_number") else None
+    password = data.get("password", "")
+    full_name = data.get("full_name", "").strip()
+
+    # Validation
+    if not email or not password or not full_name:
+        return jsonify({"msg": "Email, password, and full name are required"}), 400
+
+    if not is_valid_email(email):
+        return jsonify({"msg": "Invalid email address"}), 400
+
+    if phone and not is_valid_phone(phone):
+        return jsonify({"msg": "Invalid phone number format"}), 400
+
+    if not validate_password(password):
+        return jsonify({"msg": "Password must be at least 8 characters long, contain letters and numbers"}), 400
+
+    # Check for existing users with same email or phone
+    if User.query.filter_by(email=email).first():
+        return jsonify({"msg": "Email already registered"}), 400
+
+    if phone and User.query.filter_by(phone=phone).first():
+        return jsonify({"msg": "Phone number already registered"}), 400
+
+    try:
+        # Create user data using your existing utility function
+        user_data = create_user_dict(
+            email=email,
+            name=full_name,  # Using full_name for the name field
+            phone=phone,
+            role=UserRole.ADMIN,
+            permissions=None  # First admin gets default permissions
+        )
+        
+        new_admin = User(**user_data)
+        new_admin.set_password(password)
+
+        db.session.add(new_admin)
+        db.session.commit()
+
+        logger.info(f"First admin user created: {email}")
+        return jsonify({"msg": "First admin registered successfully"}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"First admin registration error: {str(e)}")
+        return jsonify({"msg": "First admin registration failed", "error": str(e)}), 500
