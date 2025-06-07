@@ -34,96 +34,102 @@ class ReportGenerationResource(Resource):
     Enhanced with better data collection for charts and analytics.
     """
 
-    @jwt_required()
-    def post(self):
-        """
-        Generate a new report with enhanced data collection for charts.
-        Admins only.
-        """
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+@jwt_required()
+def post(self):
+    """
+    Generate a new report with enhanced data collection for charts.
+    Admins only.
+    """
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
 
-        if not user or user.role != UserRole.ADMIN:
-            return {"message": "Only admins can generate reports"}, 403
+    if not user or user.role != UserRole.ADMIN:
+        return {"message": "Only admins can generate reports"}, 403
 
-        data = request.get_json()
-        if not data or 'report_name' not in data:
-            return {"message": "Report name is required"}, 400
+    data = request.get_json()
+    if not data or 'report_name' not in data:
+        return {"message": "Report name is required"}, 400
 
-        report_name = data['report_name']
-        start_date_str = data.get('start_date')
-        end_date_str = data.get('end_date')
+    report_name = data['report_name']
+    start_date_str = data.get('start_date')
+    end_date_str = data.get('end_date')
 
-        start_date = None
-        end_date = None
+    start_date = None
+    end_date = None
 
-        if start_date_str:
-            try:
-                start_date = datetime.fromisoformat(start_date_str)
-            except ValueError:
-                return {"message": "Invalid start_date format. Use YYYY-MM-DDTHH:MM:SS"}, 400
-
-        if end_date_str:
-            try:
-                end_date = datetime.fromisoformat(end_date_str)
-            except ValueError:
-                return {"message": "Invalid end_date format. Use YYYY-MM-DDTHH:MM:SS"}, 400
-
-        if start_date and end_date and start_date > end_date:
-            return {"message": "Start date cannot be after end date"}, 400
-
+    if start_date_str:
         try:
-            # Enhanced data collection for better reporting
-            enhanced_data = self._collect_enhanced_report_data(start_date, end_date)
+            start_date = datetime.fromisoformat(start_date_str)
+        except ValueError:
+            return {"message": "Invalid start_date format. Use YYYY-MM-DDTHH:MM:SS"}, 400
 
-            new_report = Report(
-                report_name=report_name,
-                start_date=start_date,
-                end_date=end_date,
-                total_orders=enhanced_data['total_orders'],
-                total_revenue=enhanced_data['total_revenue'],
-                total_products_sold=enhanced_data['total_products_sold'],
-                top_selling_category_id=enhanced_data['top_selling_category_id'],
-                # Store enhanced data as JSON for chart generation
-                enhanced_data=json.dumps(enhanced_data['chart_data'])
-            )
+    if end_date_str:
+        try:
+            end_date = datetime.fromisoformat(end_date_str)
+        except ValueError:
+            return {"message": "Invalid end_date format. Use YYYY-MM-DDTHH:MM:SS"}, 400
 
-            db.session.add(new_report)
-            db.session.commit()
+    if start_date and end_date and start_date > end_date:
+        return {"message": "Start date cannot be after end date"}, 400
 
-            response_data = {
-                "message": "Report generated successfully",
-                "report_id": new_report.id,
-                "report_name": new_report.report_name,
-                "generated_at": new_report.generated_at.isoformat(),
-                "start_date": new_report.start_date.isoformat() if new_report.start_date else None,
-                "end_date": new_report.end_date.isoformat() if new_report.end_date else None,
-                "total_orders": new_report.total_orders,
-                "total_revenue": str(new_report.total_revenue),
-                "total_products_sold": new_report.total_products_sold,
-                "top_selling_category_id": new_report.top_selling_category_id
-            }
+    try:
+        # Enhanced data collection for better reporting
+        enhanced_data = self._collect_enhanced_report_data(start_date, end_date)
 
-            # Add category name if available
-            if enhanced_data['top_selling_category_id']:
-                category = Category.query.get(enhanced_data['top_selling_category_id'])
-                if category:
-                    response_data['top_selling_category_name'] = category.name
+        new_report = Report(
+            report_name=report_name,
+            start_date=start_date,
+            end_date=end_date,
+            total_orders=enhanced_data['total_orders'],
+            total_revenue=enhanced_data['total_revenue'],
+            total_products_sold=enhanced_data['total_products_sold'],
+            top_selling_category_id=enhanced_data['top_selling_category_id'],
+            pending_orders=enhanced_data.get('pending_orders', 0),
+            complete_orders=enhanced_data.get('complete_orders', 0),
+            failed_payments=enhanced_data.get('failed_payments', 0),
+            summary=enhanced_data.get('summary'),
+            generated_by_user_id=current_user_id,
+            # ✅ Store extra chart data using report_data column
+            report_data=enhanced_data.get('chart_data', {})
+        )
 
-            return response_data, 201
+        db.session.add(new_report)
+        db.session.commit()
 
-        except OperationalError as e:
-            db.session.rollback()
-            logger.error(f"Database operational error during report generation: {str(e)}")
-            return {"message": "Database connection error during report generation"}, 500
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            logger.error(f"SQLAlchemy error during report generation: {str(e)}")
-            return {"message": "An error occurred with the database during report generation"}, 500
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Unexpected error during report generation: {str(e)}", exc_info=True)
-            return {"message": "An unexpected error occurred while generating the report"}, 500
+        response_data = {
+            "message": "Report generated successfully",
+            "report_id": new_report.id,
+            "report_name": new_report.report_name,
+            "generated_at": new_report.generated_at.isoformat(),
+            "start_date": new_report.start_date.isoformat() if new_report.start_date else None,
+            "end_date": new_report.end_date.isoformat() if new_report.end_date else None,
+            "total_orders": new_report.total_orders,
+            "total_revenue": str(new_report.total_revenue),
+            "total_products_sold": new_report.total_products_sold,
+            "top_selling_category_id": new_report.top_selling_category_id
+        }
+
+        # Add category name if available
+        if enhanced_data['top_selling_category_id']:
+            category = Category.query.get(enhanced_data['top_selling_category_id'])
+            if category:
+                response_data['top_selling_category_name'] = category.name
+
+        return response_data, 201
+
+    except OperationalError as e:
+        db.session.rollback()
+        logger.error(f"Database operational error during report generation: {str(e)}")
+        return {"message": "Database connection error during report generation"}, 500
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        logger.error(f"SQLAlchemy error during report generation: {str(e)}")
+        return {"message": "An error occurred with the database during report generation"}, 500
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Unexpected error during report generation: {str(e)}", exc_info=True)
+        return {"message": "An unexpected error occurred while generating the report"}, 500
+
 
     def _collect_enhanced_report_data(self, start_date, end_date):
         """
