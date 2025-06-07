@@ -14,8 +14,8 @@ from decimal import Decimal
 
 # Import the enhanced PDF utilities
 from pdf_utils import (
-    SalesReportGenerator, 
-    ChartGenerator, 
+    SalesReportGenerator,
+    ChartGenerator,
     generate_comprehensive_sales_report_pdf,
     generate_revenue_chart,
     generate_product_sales_chart
@@ -62,7 +62,7 @@ class ReportGenerationResource(Resource):
                 start_date = datetime.fromisoformat(start_date_str)
             except ValueError:
                 return {"message": "Invalid start_date format. Use YYYY-MM-DDTHH:MM:SS"}, 400
-        
+
         if end_date_str:
             try:
                 end_date = datetime.fromisoformat(end_date_str)
@@ -75,7 +75,7 @@ class ReportGenerationResource(Resource):
         try:
             # Enhanced data collection for better reporting
             enhanced_data = self._collect_enhanced_report_data(start_date, end_date)
-            
+
             new_report = Report(
                 report_name=report_name,
                 start_date=start_date,
@@ -131,22 +131,22 @@ class ReportGenerationResource(Resource):
         """
         # Base query for delivered orders
         query = Order.query.filter_by(status=OrderStatus.DELIVERED)
-        
+
         if start_date:
-            query = query.filter(Order.order_date >= start_date)
+            query = query.filter(Order.created_at >= start_date)
         if end_date:
-            query = query.filter(Order.order_date <= end_date)
+            query = query.filter(Order.created_at <= end_date)
 
         orders = query.all()
         total_orders = len(orders)
         total_revenue = sum(order.total_amount for order in orders)
-        
+
         # Enhanced data collection
         category_revenue = {}
         category_quantities = {}
         product_sales = {}
         total_products_sold = 0
-        
+
         for order in orders:
             for item in order.order_items:  # Assuming 'order_items' relationship
                 product = Product.query.get(item.product_id)
@@ -155,7 +155,7 @@ class ReportGenerationResource(Resource):
                     product_name = product.name
                     product_sales[product_name] = product_sales.get(product_name, 0) + item.quantity
                     total_products_sold += item.quantity
-                    
+
                     # Category tracking
                     if product.category_id:
                         category = Category.query.get(product.category_id)
@@ -212,7 +212,7 @@ class ReportGenerationResource(Resource):
                 report = Report.query.get(report_id)
                 if not report:
                     return {"message": "Report not found"}, 404
-                
+
                 report_data = {
                     "id": report.id,
                     "report_name": report.report_name,
@@ -224,7 +224,7 @@ class ReportGenerationResource(Resource):
                     "total_products_sold": report.total_products_sold,
                     "top_selling_category_id": report.top_selling_category_id
                 }
-                
+
                 # Add enhanced data if available
                 if hasattr(report, 'enhanced_data') and report.enhanced_data:
                     try:
@@ -236,7 +236,7 @@ class ReportGenerationResource(Resource):
                         }
                     except json.JSONDecodeError:
                         logger.warning(f"Invalid enhanced_data JSON for report {report_id}")
-                
+
                 # Add top selling category name
                 if report.top_selling_category_id:
                     category = Category.query.get(report.top_selling_category_id)
@@ -247,7 +247,7 @@ class ReportGenerationResource(Resource):
             else:
                 page = request.args.get('page', 1, type=int)
                 per_page = request.args.get('per_page', 10, type=int)
-                
+
                 reports = Report.query.order_by(Report.generated_at.desc()).paginate(
                     page=page, per_page=per_page, error_out=False
                 )
@@ -259,7 +259,7 @@ class ReportGenerationResource(Resource):
                         'pages': 0,
                         'current_page': page
                     }, 200
-                
+
                 reports_data = []
                 for report in reports.items:
                     report_dict = {
@@ -296,7 +296,6 @@ class ReportGenerationResource(Resource):
             logger.error(f"Unexpected error during report retrieval: {str(e)}", exc_info=True)
             return {"message": "An unexpected error occurred while retrieving reports"}, 500
 
-
 class ReportPDFResource(Resource):
     """
     Enhanced PDF resource using the new pdf_utils for comprehensive reports.
@@ -321,32 +320,32 @@ class ReportPDFResource(Resource):
 
             # Prepare comprehensive report data
             report_data = self._prepare_comprehensive_report_data(report)
-            
+
             # Generate enhanced PDF using pdf_utils
             pdf_filename = f"enhanced_report_{report.report_name.replace(' ', '_')}_{report.id}.pdf"
             temp_pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
-            
+
             # Use the enhanced PDF generator
             generator = SalesReportGenerator()
             result_path = generator.generate_comprehensive_report(
-                report_data, 
-                str(report.id), 
+                report_data,
+                str(report.id),
                 temp_pdf_path
             )
-            
+
             if not result_path or not os.path.exists(result_path):
                 return {"message": "Failed to generate PDF report"}, 500
-            
+
             # Read the generated PDF
             with open(result_path, 'rb') as pdf_file:
                 pdf_buffer = io.BytesIO(pdf_file.read())
-            
+
             # Clean up temporary file
             try:
                 os.remove(result_path)
             except Exception as e:
                 logger.warning(f"Could not remove temporary PDF file: {e}")
-            
+
             return send_file(
                 pdf_buffer,
                 as_attachment=True,
@@ -371,13 +370,13 @@ class ReportPDFResource(Resource):
             'end_date': report.end_date.strftime('%Y-%m-%d') if report.end_date else None,
             'top_selling_category_name': None
         }
-        
+
         # Add top selling category name
         if report.top_selling_category_id:
             category = Category.query.get(report.top_selling_category_id)
             if category:
                 report_data['top_selling_category_name'] = category.name
-        
+
         # Add enhanced data if available
         if hasattr(report, 'enhanced_data') and report.enhanced_data:
             try:
@@ -389,9 +388,8 @@ class ReportPDFResource(Resource):
                 })
             except json.JSONDecodeError:
                 logger.warning(f"Could not parse enhanced_data for report {report.id}")
-        
-        return report_data
 
+        return report_data
 
 class ReportEmailResource(Resource):
     """
@@ -418,7 +416,7 @@ class ReportEmailResource(Resource):
         sender_email = data.get('sender_email')
 
         temp_file = None
-        
+
         try:
             report = Report.query.get(report_id)
             if not report:
@@ -427,21 +425,21 @@ class ReportEmailResource(Resource):
             # Prepare comprehensive report data
             pdf_resource = ReportPDFResource()
             report_data = pdf_resource._prepare_comprehensive_report_data(report)
-            
+
             # Generate enhanced PDF
             generator = SalesReportGenerator()
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
             temp_file.close()
-            
+
             result_path = generator.generate_comprehensive_report(
-                report_data, 
-                str(report.id), 
+                report_data,
+                str(report.id),
                 temp_file.name
             )
-            
+
             if not result_path or not os.path.exists(result_path):
                 return {"message": "Failed to generate PDF for email"}, 500
-            
+
             # Send email using email_utils
             success = send_sales_report_email(
                 recipient=recipient_email,
@@ -450,7 +448,7 @@ class ReportEmailResource(Resource):
                 report_data=report_data,
                 sender=sender_email
             )
-            
+
             if success:
                 return {
                     "message": "Enhanced report sent successfully",
@@ -473,8 +471,6 @@ class ReportEmailResource(Resource):
             if temp_file and os.path.exists(temp_file.name):
                 cleanup_temp_files([temp_file.name])
 
-
-# New resource for chart generation endpoints
 class ReportChartsResource(Resource):
     """
     Resource for generating individual charts from reports.
@@ -503,30 +499,30 @@ class ReportChartsResource(Resource):
             # Prepare report data
             pdf_resource = ReportPDFResource()
             report_data = pdf_resource._prepare_comprehensive_report_data(report)
-            
+
             # Generate specific chart
             chart_generator = ChartGenerator()
             temp_chart_path = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
             temp_chart_path.close()
-            
+
             if chart_type == 'revenue':
                 result_path = chart_generator.generate_revenue_chart(report_data, temp_chart_path.name)
             else:  # products
                 result_path = chart_generator.generate_product_sales_chart(report_data, temp_chart_path.name)
-            
+
             if not result_path or not os.path.exists(result_path):
                 return {"message": f"Failed to generate {chart_type} chart"}, 500
-            
+
             # Return the chart image
             with open(result_path, 'rb') as chart_file:
                 chart_buffer = io.BytesIO(chart_file.read())
-            
+
             # Clean up
             try:
                 os.remove(result_path)
             except Exception as e:
                 logger.warning(f"Could not remove temporary chart file: {e}")
-            
+
             return send_file(
                 chart_buffer,
                 as_attachment=True,
@@ -537,7 +533,6 @@ class ReportChartsResource(Resource):
         except Exception as e:
             logger.error(f"Error generating {chart_type} chart: {str(e)}", exc_info=True)
             return {"message": f"An error occurred while generating the {chart_type} chart"}, 500
-
 
 def register_report_resources(api):
     """Registers the enhanced Report resource routes with Flask-RESTful API."""
