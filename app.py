@@ -2,7 +2,6 @@ from flask import Flask
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
-from flask_mail import Mail
 from flask_restful import Api
 from flask_migrate import Migrate
 from config import Config
@@ -22,6 +21,7 @@ from payment import register_payment_resources
 from report import register_report_resources
 from custom_image import register_custom_image_resources
 from pickup_point import register_pickup_point_resources
+from email_utils import mail
 import cloudinary
 
 # Initialize Flask app
@@ -70,8 +70,9 @@ api = Api(app)
 jwt = JWTManager(app)
 
 migrate = Migrate(app, db)
+mail.init_app(app)
 
-mail = Mail(app)
+
 
 cloudinary.config(
     cloud_name=os.getenv('CLOUDINARY_CLOUD_NAME'),
