@@ -70,12 +70,12 @@ class ProductResource(Resource):
             logger.error(f"Error fetching products: {str(e)}")
             return {"message": "Error fetching products"}, 500
 
-    # @jwt_required()
+    @jwt_required()
     def post(self):
         """Create a new product (Only admins can create products)."""
         try:
-            # identity = get_jwt_identity()
-            # user = User.query.get(identity)
+            identity = get_jwt_identity()
+            user = User.query.get(identity)
             
             # if not user or user.role != UserRole.ADMIN:
             #     return {"message": "Only admins can create products"}, 403
