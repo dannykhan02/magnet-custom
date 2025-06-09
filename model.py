@@ -186,9 +186,12 @@ class PickupPoint(db.Model):
     phone_number = db.Column(db.String(20), nullable=True) # Mock phone numbers, nullable for flexibility
     is_doorstep = db.Column(db.Boolean, default=False, nullable=False) # True for doorstep delivery, False for agent pickup/other
     delivery_method = db.Column(db.String(100), nullable=False) # e.g., "Mtaani Agent", "By Bus", "Courier", "Doorstep"
+    contact_person = db.Column(db.String(255), nullable=True)
+
 
     # Relationships (ensure 'Order' model is defined elsewhere and linked correctly)
     orders = db.relationship('Order', back_populates='pickup_point', lazy=True)
+
 
     def as_dict(self):
         return {
@@ -202,7 +205,8 @@ class PickupPoint(db.Model):
             "cost": self.cost,
             "phone_number": self.phone_number,
             "is_doorstep": self.is_doorstep,
-            "delivery_method": self.delivery_method
+            "delivery_method": self.delivery_method,
+            "contact_person": self.contact_person,
         }
 
     def __repr__(self):
