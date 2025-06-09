@@ -172,7 +172,7 @@ class Product(db.Model):
 # Pickup Point model
 class PickupPoint(db.Model):
     __tablename__ = 'pickup_points'
-    
+
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(255), nullable=False)
     location_details = db.Column(db.Text, nullable=True)
@@ -181,7 +181,13 @@ class PickupPoint(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # Relationships
+    # New fields to match the provided data
+    cost = db.Column(db.Float, nullable=False) # Store the shipping cost
+    phone_number = db.Column(db.String(20), nullable=True) # Mock phone numbers, nullable for flexibility
+    is_doorstep = db.Column(db.Boolean, default=False, nullable=False) # True for doorstep delivery, False for agent pickup/other
+    delivery_method = db.Column(db.String(100), nullable=False) # e.g., "Mtaani Agent", "By Bus", "Courier", "Doorstep"
+
+    # Relationships (ensure 'Order' model is defined elsewhere and linked correctly)
     orders = db.relationship('Order', back_populates='pickup_point', lazy=True)
 
     def as_dict(self):
@@ -192,8 +198,15 @@ class PickupPoint(db.Model):
             "city": self.city,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
-            "updated": self.updated.isoformat()
+            "updated": self.updated.isoformat(),
+            "cost": self.cost,
+            "phone_number": self.phone_number,
+            "is_doorstep": self.is_doorstep,
+            "delivery_method": self.delivery_method
         }
+
+    def __repr__(self):
+        return f"<PickupPoint {self.name} ({self.city}) - KSh {self.cost}>"
 
 # Order model
 class Order(db.Model):
