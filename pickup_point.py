@@ -120,7 +120,8 @@ class PickupPointResource(Resource):
                 cost=cost_value,
                 phone_number=data.get("phone_number"),
                 is_doorstep=data.get('is_doorstep', False), # Default to False if not provided
-                delivery_method=data["delivery_method"]
+                delivery_method=data["delivery_method"],
+                contact_person=data.get("contact_person") # <--- Explicitly getting contact_person for POST
             )
 
             db.session.add(pickup_point)
@@ -162,7 +163,7 @@ class PickupPointResource(Resource):
             # Check if name is being updated and if it already exists
             if "name" in data and data["name"] != pickup_point.name:
                 existing_pickup_point = PickupPoint.query.filter_by(name=data["name"]).first()
-                if existing_pickup_point:
+                if existing_pickup_point and existing_pickup_point.id != pickup_point.id: # Ensure it's not the same point
                     return {"error": "Pickup point with this name already exists"}, 400
 
             # Update pickup point attributes
@@ -193,6 +194,9 @@ class PickupPointResource(Resource):
 
             if "delivery_method" in data:
                 pickup_point.delivery_method = data["delivery_method"]
+            
+            if "contact_person" in data: # <--- Explicitly getting contact_person for PUT
+                pickup_point.contact_person = data.get("contact_person") # Use data.get as it's nullable
 
 
             # Update the updated timestamp (already there, but good to ensure it's explicitly set if needed)
