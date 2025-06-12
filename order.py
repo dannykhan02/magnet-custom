@@ -12,7 +12,6 @@ from decimal import Decimal
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 def generate_order_number():
     """Generate a unique order number."""
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
