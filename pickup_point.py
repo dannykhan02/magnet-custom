@@ -249,27 +249,30 @@ class PickupPointResource(Resource):
 class PickupPointByCityResource(Resource):
     """Resource for getting pickup points filtered by city."""
 
-    def get(self, city):
-        """Get all active pickup points in a specific city."""
+    def get(self, county):
+        """Get all active pickup points in a specific county."""
         try:
             pickup_points = PickupPoint.query.filter(
-                PickupPoint.city.ilike(f'%{city}%'),
+                PickupPoint.county.ilike(f'%{county}%'), # Changed 'city' to 'county'
                 PickupPoint.is_active == True
             ).order_by(PickupPoint.name.asc()).all()
 
+            # If PickupPoint model's as_dict() method includes postalCode,
+            # you might need to adjust as_dict() or filter it out here
+            # if it's strictly not to be returned for pickup points.
+            # For now, assuming as_dict() only returns relevant data.
             return {
                 'pickup_points': [pickup_point.as_dict() for pickup_point in pickup_points],
-                'city': city,
+                'county': county, # Changed 'city' to 'county'
                 'total': len(pickup_points)
             }, 200
 
         except (OperationalError, SQLAlchemyError) as e:
-            logger.error(f"Database error fetching pickup points for city {city}: {str(e)}")
+            logger.error(f"Database error fetching pickup points for county {county}: {str(e)}")
             return {"message": "Database connection error or operation failed."}, 500
         except Exception as e:
-            logger.error(f"Error fetching pickup points for city {city}: {str(e)}", exc_info=True)
+            logger.error(f"Error fetching pickup points for county {county}: {str(e)}", exc_info=True)
             return {"message": "Error fetching pickup points"}, 500
-
 
 class AdminPickupPointsResource(Resource):
     """Resource for admins to manage all pickup points."""
@@ -317,5 +320,5 @@ class AdminPickupPointsResource(Resource):
 def register_pickup_point_resources(api):
     """Registers the PickupPointResource routes with Flask-RESTful API."""
     api.add_resource(PickupPointResource, "/pickup-points", "/pickup-points/<string:pickup_point_id>")
-    api.add_resource(PickupPointByCityResource, "/pickup-points/city/<string:city>")
+    api.add_resource(PickupPointByCityResource, "/pickup-points/city/<string:county>")
     api.add_resource(AdminPickupPointsResource, "/admin/pickup-points")
