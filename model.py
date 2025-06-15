@@ -177,21 +177,20 @@ class PickupPoint(db.Model):
     name = db.Column(db.String(255), nullable=False)
     location_details = db.Column(db.Text, nullable=True)
     city = db.Column(db.String(255), nullable=True)
+    county = db.Column(db.String(255), nullable=True)  # ✅ New field added
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # New fields to match the provided data
-    cost = db.Column(db.Float, nullable=False) # Store the shipping cost
-    phone_number = db.Column(db.String(20), nullable=True) # Mock phone numbers, nullable for flexibility
-    is_doorstep = db.Column(db.Boolean, default=False, nullable=False) # True for doorstep delivery, False for agent pickup/other
-    delivery_method = db.Column(db.String(100), nullable=False) # e.g., "Mtaani Agent", "By Bus", "Courier", "Doorstep"
+    cost = db.Column(db.Float, nullable=False)
+    phone_number = db.Column(db.String(20), nullable=True)
+    is_doorstep = db.Column(db.Boolean, default=False, nullable=False)
+    delivery_method = db.Column(db.String(100), nullable=False)
     contact_person = db.Column(db.String(255), nullable=True)
 
-
-    # Relationships (ensure 'Order' model is defined elsewhere and linked correctly)
+    # Relationships
     orders = db.relationship('Order', back_populates='pickup_point', lazy=True)
-
 
     def as_dict(self):
         return {
@@ -199,6 +198,7 @@ class PickupPoint(db.Model):
             "name": self.name,
             "location_details": self.location_details,
             "city": self.city,
+            "county": self.county,  
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
             "updated": self.updated.isoformat(),
@@ -210,7 +210,8 @@ class PickupPoint(db.Model):
         }
 
     def __repr__(self):
-        return f"<PickupPoint {self.name} ({self.city}) - KSh {self.cost}>"
+        return f"<PickupPoint {self.name} ({self.city}, {self.county}) - KSh {self.cost}>"
+
 
 # Order model
 class Order(db.Model):
