@@ -34,9 +34,10 @@ class Config:
         'pool_recycle': 1800,
     }
 
-
     # JWT Authentication
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "fallback-jwt-secret")
+    JWT_BLACKLIST_ENABLED = True
+    JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
     # SQLAlchemy Session Configuration
     SESSION_TYPE = "sqlalchemy"
