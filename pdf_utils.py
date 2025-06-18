@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -16,18 +16,18 @@ logger = logging.getLogger(__name__)
 
 class SalesReportConfig:
     """Configuration class for sales report styling and colors."""
-    
+
     # Define specific colors for each product category - using string hex values for matplotlib
     COLORS_BY_CATEGORY_MATPLOTLIB = {
-        'FRIDGE_MAGNETS': '#FF8042',        # Orange
-        'CUSTOM_PRINTS': '#FFBB28',         # Yellow
-        'BUSINESS_CARDS': '#0088FE',        # Blue
-        'STICKERS': '#00C49F',              # Green
-        'PROMOTIONAL': '#FF6699',           # Pinkish
-        'PHOTO_MAGNETS': '#AA336A',         # Purple
-        'BULK_ORDERS': '#00FF00',           # Bright Green
-        'SPECIALTY': '#8884D8',             # Light Purple
-        'UNKNOWN_CATEGORY': '#A9A9A9',      # Darker Grey for unknown categories
+        'FRIDGE_MAGNETS': '#FF8042',
+        'CUSTOM_PRINTS': '#FFBB28',
+        'BUSINESS_CARDS': '#0088FE',
+        'STICKERS': '#00C49F',
+        'PROMOTIONAL': '#FF6699',
+        'PHOTO_MAGNETS': '#AA336A',
+        'BULK_ORDERS': '#00FF00',
+        'SPECIALTY': '#8884D8',
+        'UNKNOWN_CATEGORY': '#A9A9A9',
     }
 
     # Separate color definitions for ReportLab (using HexColor objects)
@@ -49,7 +49,7 @@ class SalesReportConfig:
         '#00FF00', '#8884D8', '#FF1493', '#32CD32', '#FF4500', '#9932CC',
         '#FF69B4', '#228B22', '#FF8C00', '#9370DB', '#20B2AA', '#DC143C'
     ]
-    
+
     EXTENDED_COLORS_REPORTLAB = [colors.HexColor(color) for color in EXTENDED_COLORS_MATPLOTLIB]
 
     # Fallback colors
@@ -68,20 +68,20 @@ class SalesReportConfig:
 
 class DataValidator:
     """Utility class for validating report data."""
-    
+
     @staticmethod
     def validate_report_data(report: Dict) -> bool:
         """Validate that the report contains the minimum required data."""
         required_fields = ['total_revenue', 'total_orders']
         return all(field in report for field in required_fields)
-    
+
     @staticmethod
     def sanitize_category_name(category: str) -> str:
         """Sanitize category names for consistent mapping."""
         if not category or category.strip() == '':
             return 'UNKNOWN_CATEGORY'
         return str(category).upper().replace(' ', '_').replace('-', '_')
-    
+
     @staticmethod
     def validate_numeric_data(data: Dict) -> Dict:
         """Ensure all numeric values are valid."""
@@ -96,29 +96,29 @@ class DataValidator:
 
 class ChartGenerator:
     """Enhanced chart generation with better error handling and styling."""
-    
+
     def __init__(self, config: SalesReportConfig = None):
         self.config = config or SalesReportConfig()
         self.validator = DataValidator()
-    
+
     def _get_color_for_category(self, category: str, color_index: int = None) -> str:
         """Get appropriate color for a category, with fallback to indexed colors."""
         sanitized_category = self.validator.sanitize_category_name(category)
-        
+
         # Try to get predefined color
         color = self.config.COLORS_BY_CATEGORY_MATPLOTLIB.get(sanitized_category)
-        
+
         # If not found, use extended color palette with index
         if not color and color_index is not None:
             color_palette = self.config.EXTENDED_COLORS_MATPLOTLIB
             color = color_palette[color_index % len(color_palette)]
-        
+
         return color or self.config.FALLBACK_COLOR_MATPLOTLIB
-    
+
     def _setup_matplotlib_style(self):
         """Setup consistent matplotlib styling."""
-        plt.style.use('default')  # Reset to default first
-        
+        plt.style.use('default')
+
     def generate_revenue_chart(self, report: Dict, path: str = "revenue_chart.png") -> str:
         """Generate an enhanced donut chart for Revenue by Product Category."""
         try:
@@ -133,17 +133,17 @@ class ChartGenerator:
                 revenue_data = {'Total Sales': report.get('total_revenue', 0)}
 
             revenue_data = self.validator.validate_numeric_data(revenue_data)
-            
+
             # Filter out zero values
             revenue_data = {k: v for k, v in revenue_data.items() if v > 0}
-            
+
             if not revenue_data:
                 return self._create_no_data_chart(path, "No Revenue Data Available")
 
             # Prepare data for plotting
             labels = list(revenue_data.keys())
             values = list(revenue_data.values())
-            
+
             # Generate colors
             chart_colors = [self._get_color_for_category(label, i) for i, label in enumerate(labels)]
 
@@ -179,21 +179,21 @@ class ChartGenerator:
             if len(revenue_data) > 1:
                 avg_category_revenue = total_revenue / len(revenue_data)
                 center_text += f'\n\nAvg per Category\n${avg_category_revenue:,.2f}'
-            
-            ax.text(0, 0, center_text, ha='center', va='center', 
+
+            ax.text(0, 0, center_text, ha='center', va='center',
                    color=self.config.CHART_STYLE['text_color'], fontsize=11, weight='bold')
 
             # Enhanced styling
             ax.axis('equal')
-            plt.title(f'Revenue by Product Category\nTotal: ${total_revenue:,.2f}', 
-                     color=self.config.CHART_STYLE['text_color'], 
-                     fontsize=self.config.CHART_STYLE['title_fontsize'], 
+            plt.title(f'Revenue by Product Category\nTotal: ${total_revenue:,.2f}',
+                     color=self.config.CHART_STYLE['text_color'],
+                     fontsize=self.config.CHART_STYLE['title_fontsize'],
                      pad=20, weight='bold')
-            
+
             plt.tight_layout()
-            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight', 
-                       facecolor=fig.get_facecolor(), edgecolor='none')
-            
+            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight',
+                        facecolor=fig.get_facecolor(), edgecolor='none')
+
             logger.info(f"Enhanced revenue chart saved to {path}")
             return path
 
@@ -207,21 +207,21 @@ class ChartGenerator:
         """Generate an enhanced horizontal bar chart for top-selling products."""
         try:
             products_data = report.get('top_products', {})
-            
+
             if not products_data:
                 return self._create_no_data_chart(path, "No Product Sales Data")
 
             # Validate and sort data
             products_data = self.validator.validate_numeric_data(products_data)
             products_data = {k: v for k, v in products_data.items() if v > 0}
-            
+
             if not products_data:
                 return self._create_no_data_chart(path, "No Product Sales Data")
 
             # Sort and get top products
             sorted_products = sorted(products_data.items(), key=lambda x: x[1], reverse=True)
-            top_products = sorted_products[:12]  # Increased to show more products
-            
+            top_products = sorted_products[:12]
+
             product_names = [name[:30] + '...' if len(name) > 30 else name for name, _ in top_products]
             quantities = [qty for _, qty in top_products]
 
@@ -231,9 +231,9 @@ class ChartGenerator:
 
             # Create gradient-like colors
             colors_list = plt.cm.viridis(np.linspace(0.3, 0.9, len(quantities)))
-            
+
             bars = ax.barh(product_names, quantities, color=colors_list, alpha=0.8, edgecolor='white', linewidth=0.5)
-            
+
             # Enhanced value labels
             max_qty = max(quantities)
             for i, (bar, qty) in enumerate(zip(bars, quantities)):
@@ -241,35 +241,35 @@ class ChartGenerator:
                 label_x = bar.get_width() + max_qty * 0.01 if bar.get_width() < max_qty * 0.7 else bar.get_width() * 0.95
                 label_color = '#cccccc' if bar.get_width() < max_qty * 0.7 else '#1e1e1e'
                 ha = 'left' if bar.get_width() < max_qty * 0.7 else 'right'
-                
+
                 ax.text(label_x, bar.get_y() + bar.get_height()/2,
-                       f'{qty:,}', ha=ha, va='center', color=label_color, 
+                       f'{qty:,}', ha=ha, va='center', color=label_color,
                        fontsize=9, weight='bold')
 
             # Enhanced styling
-            ax.set_xlabel('Quantity Sold', color=self.config.CHART_STYLE['text_color'], 
+            ax.set_xlabel('Quantity Sold', color=self.config.CHART_STYLE['text_color'],
                          fontsize=self.config.CHART_STYLE['label_fontsize'], weight='bold')
-            ax.set_ylabel('Products', color=self.config.CHART_STYLE['text_color'], 
+            ax.set_ylabel('Products', color=self.config.CHART_STYLE['text_color'],
                          fontsize=self.config.CHART_STYLE['label_fontsize'], weight='bold')
-            ax.set_title(f'Top {len(top_products)} Selling Products\nTotal Units: {sum(quantities):,}', 
-                        color=self.config.CHART_STYLE['text_color'], 
+            ax.set_title(f'Top {len(top_products)} Selling Products\nTotal Units: {sum(quantities):,}',
+                        color=self.config.CHART_STYLE['text_color'],
                         fontsize=self.config.CHART_STYLE['title_fontsize'], pad=20, weight='bold')
-            
+
             # Style axes
             ax.tick_params(colors=self.config.CHART_STYLE['text_color'], labelsize=self.config.CHART_STYLE['tick_fontsize'])
             ax.spines['bottom'].set_color(self.config.CHART_STYLE['text_color'])
             ax.spines['left'].set_color(self.config.CHART_STYLE['text_color'])
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
-            
+
             # Add grid for better readability
             ax.grid(True, alpha=0.3, color=self.config.CHART_STYLE['text_color'])
             ax.set_axisbelow(True)
-            
+
             plt.tight_layout()
-            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight', 
-                       facecolor=fig.get_facecolor(), edgecolor='none')
-            
+            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight',
+                        facecolor=fig.get_facecolor(), edgecolor='none')
+
             logger.info(f"Enhanced product sales chart saved to {path}")
             return path
 
@@ -284,30 +284,30 @@ class ChartGenerator:
         try:
             fig, ax = plt.subplots(figsize=(8, 6), facecolor=self.config.CHART_STYLE['figure_facecolor'])
             ax.set_facecolor(self.config.CHART_STYLE['axes_facecolor'])
-            ax.text(0.5, 0.5, f"⚠️ {message}", ha='center', va='center', 
+            ax.text(0.5, 0.5, f"⚠️ {message}", ha='center', va='center',
                    transform=ax.transAxes, color='#ff6b6b', fontsize=16, weight='bold')
             ax.axis('off')
             plt.tight_layout()
-            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight', 
-                       facecolor=fig.get_facecolor())
+            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight',
+                        facecolor=fig.get_facecolor())
             return path
         except Exception:
             return ""
         finally:
             plt.close('all')
-    
+
     def _create_no_data_chart(self, path: str, message: str) -> str:
         """Create a chart indicating no data available."""
         try:
             fig, ax = plt.subplots(figsize=(8, 6), facecolor=self.config.CHART_STYLE['figure_facecolor'])
             ax.set_facecolor(self.config.CHART_STYLE['axes_facecolor'])
-            ax.text(0.5, 0.5, f"📊 {message}", ha='center', va='center', 
-                   transform=ax.transAxes, color=self.config.CHART_STYLE['text_color'], 
+            ax.text(0.5, 0.5, f"📊 {message}", ha='center', va='center',
+                   transform=ax.transAxes, color=self.config.CHART_STYLE['text_color'],
                    fontsize=14, weight='bold')
             ax.axis('off')
             plt.tight_layout()
-            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight', 
-                       facecolor=fig.get_facecolor())
+            plt.savefig(path, transparent=False, dpi=300, bbox_inches='tight',
+                        facecolor=fig.get_facecolor())
             return path
         except Exception:
             return ""
@@ -316,13 +316,13 @@ class ChartGenerator:
 
 class SalesReportGenerator:
     """Main class for generating comprehensive sales reports."""
-    
+
     def __init__(self, config: SalesReportConfig = None):
         self.config = config or SalesReportConfig()
         self.chart_generator = ChartGenerator(self.config)
         self.validator = DataValidator()
-    
-    def generate_comprehensive_report(self, report: Dict, report_id: str, 
+
+    def generate_comprehensive_report(self, report: Dict, report_id: str,
                                     pdf_path: str = "comprehensive_sales_report.pdf") -> str:
         """Generate a comprehensive multi-page PDF sales report with enhanced features."""
         try:
@@ -333,54 +333,116 @@ class SalesReportGenerator:
 
             # Generate charts
             charts = self._generate_all_charts(report, report_id)
-            
+
             # Create PDF with enhanced styling
             doc = SimpleDocTemplate(pdf_path, pagesize=A4, topMargin=50, bottomMargin=50,
-                                  leftMargin=50, rightMargin=50)
-            
+                                    leftMargin=50, rightMargin=50)
+
             elements = []
             styles = self._create_enhanced_styles()
-            
+
             # Build report sections
             elements.extend(self._create_title_section(report, report_id, styles))
             elements.extend(self._create_executive_summary(report, styles))
             elements.extend(self._create_charts_section(charts, styles))
             elements.extend(self._create_detailed_analysis(report, styles))
             elements.extend(self._create_footer_section(styles))
-            
+
             # Build PDF
             doc.build(elements)
             logger.info(f"Comprehensive sales report generated: {pdf_path}")
-            
+
             # Cleanup temporary files
             self._cleanup_temp_files(report_id)
-            
+
             return pdf_path
-            
+
         except Exception as e:
             logger.error(f"Error generating comprehensive report: {e}")
             if os.path.exists(pdf_path):
                 os.remove(pdf_path)
             return ""
-    
+
+    def generate_order_history_report(self, order_history: List[Dict], user_name: str, pdf_path: str = "order_history_report.pdf") -> str:
+        """
+        Generate a PDF report for a user's order history.
+
+        Args:
+            order_history: A list of dictionaries, where each dictionary represents an order.
+            user_name: The name of the user.
+            pdf_path: The path where the PDF will be saved.
+
+        Returns:
+            The path to the generated PDF.
+        """
+        try:
+            # Create a PDF document
+            doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # Add a title
+            title = Paragraph(f"Order History for {user_name}", styles['Title'])
+            elements.append(title)
+            elements.append(Spacer(1, 24))
+
+            # Define the table data
+            table_data = [["Order ID", "Date", "Items", "Quantity", "Price", "Total"]]
+
+            # Populate the table with order history data
+            for order in order_history:
+                order_id = order.get('order_id', 'N/A')
+                date = order.get('date', 'N/A')
+                items = ", ".join([item['name'] for item in order.get('items', [])])
+                quantity = sum(item['quantity'] for item in order.get('items', []))
+                price = ", ".join([f"${item['price']:.2f}" for item in order.get('items', [])])
+                total = f"${order.get('total', 0):.2f}"
+
+                table_data.append([order_id, date, items, quantity, price, total])
+
+            # Create the table
+            table = Table(table_data)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+
+            elements.append(table)
+
+            # Build the PDF
+            doc.build(elements)
+
+            logger.info(f"Order history report generated: {pdf_path}")
+            return pdf_path
+
+        except Exception as e:
+            logger.error(f"Error generating order history report: {e}")
+            return ""
+
     def _generate_all_charts(self, report: Dict, report_id: str) -> Dict[str, str]:
         """Generate all required charts for the report."""
         charts = {}
-        
+
         # Revenue chart
         revenue_path = f"revenue_{report_id}.png"
         charts['revenue'] = self.chart_generator.generate_revenue_chart(report, revenue_path)
-        
+
         # Product sales chart
         product_path = f"products_{report_id}.png"
         charts['products'] = self.chart_generator.generate_product_sales_chart(report, product_path)
-        
+
         return charts
-    
+
     def _create_enhanced_styles(self) -> Dict:
         """Create enhanced PDF styles."""
         styles = getSampleStyleSheet()
-        
+
         # Add custom styles
         styles.add(ParagraphStyle(
             name='ReportTitle',
@@ -391,7 +453,7 @@ class SalesReportGenerator:
             textColor=colors.HexColor('#2c3e50'),
             fontName='Helvetica-Bold'
         ))
-        
+
         styles.add(ParagraphStyle(
             name='SectionHeader',
             parent=styles['Heading1'],
@@ -401,7 +463,7 @@ class SalesReportGenerator:
             textColor=colors.HexColor('#34495e'),
             fontName='Helvetica-Bold'
         ))
-        
+
         styles.add(ParagraphStyle(
             name='EnhancedBody',
             parent=styles['Normal'],
@@ -411,44 +473,44 @@ class SalesReportGenerator:
             textColor=colors.HexColor('#2c3e50'),
             fontName='Helvetica'
         ))
-        
+
         return styles
-    
+
     def _create_title_section(self, report: Dict, report_id: str, styles) -> List:
         """Create the title section of the report."""
         elements = []
-        
+
         title = f"📊 Sales Performance Report"
         subtitle = f"{report.get('report_name', f'Report #{report_id}')}"
-        
+
         elements.append(Paragraph(title, styles['ReportTitle']))
         elements.append(Paragraph(subtitle, styles['EnhancedBody']))
         elements.append(Spacer(1, 20))
-        
+
         # Report metadata
         generated_at = datetime.now().strftime("%B %d, %Y at %I:%M %p")
         elements.append(Paragraph(f"<b>Generated:</b> {generated_at}", styles['EnhancedBody']))
-        
+
         # Date range
         start_date = report.get('start_date')
         end_date = report.get('end_date')
         if start_date and end_date:
             elements.append(Paragraph(f"<b>Period:</b> {start_date} to {end_date}", styles['EnhancedBody']))
-        
+
         elements.append(Spacer(1, 30))
         return elements
-    
+
     def _create_executive_summary(self, report: Dict, styles) -> List:
         """Create executive summary section."""
         elements = []
         elements.append(Paragraph("Executive Summary", styles['SectionHeader']))
-        
+
         # Calculate key metrics
         total_orders = report.get('total_orders', 0)
         total_revenue = report.get('total_revenue', 0)
         total_products = report.get('total_products_sold', 0)
         avg_order_value = total_revenue / max(total_orders, 1)
-        
+
         # Create enhanced summary table
         summary_data = [
             ['Key Performance Indicators', 'Value', 'Status'],
@@ -457,7 +519,7 @@ class SalesReportGenerator:
             ['Products Sold', f"{total_products:,}", self._get_status_indicator(total_products, 500)],
             ['Average Order Value', f"${avg_order_value:.2f}", self._get_status_indicator(avg_order_value, 50)]
         ]
-        
+
         summary_table = Table(summary_data, colWidths=[150, 100, 80])
         summary_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
@@ -470,11 +532,11 @@ class SalesReportGenerator:
             ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#bdc3c7')),
             ('FONTSIZE', (0, 1), (-1, -1), 10)
         ]))
-        
+
         elements.append(summary_table)
         elements.append(Spacer(1, 30))
         return elements
-    
+
     def _get_status_indicator(self, value: float, threshold: float) -> str:
         """Get status indicator based on value vs threshold."""
         if value >= threshold:
@@ -483,11 +545,11 @@ class SalesReportGenerator:
             return "⚠️ Fair"
         else:
             return "❌ Poor"
-    
+
     def _create_charts_section(self, charts: Dict[str, str], styles) -> List:
         """Create charts section."""
         elements = []
-        
+
         # Revenue Analysis
         if charts.get('revenue') and os.path.exists(charts['revenue']):
             elements.append(Paragraph("Revenue Analysis", styles['SectionHeader']))
@@ -500,7 +562,7 @@ class SalesReportGenerator:
                 elements.append(Spacer(1, 20))
             except Exception as e:
                 logger.error(f"Could not embed revenue chart: {e}")
-        
+
         # Product Performance
         if charts.get('products') and os.path.exists(charts['products']):
             elements.append(Paragraph("Product Performance", styles['SectionHeader']))
@@ -513,49 +575,49 @@ class SalesReportGenerator:
                 elements.append(Spacer(1, 30))
             except Exception as e:
                 logger.error(f"Could not embed product chart: {e}")
-        
+
         return elements
-    
+
     def _create_detailed_analysis(self, report: Dict, styles) -> List:
         """Create detailed analysis section."""
         elements = []
         elements.append(Paragraph("Detailed Analysis", styles['SectionHeader']))
-        
+
         # Top performing category
         top_category = report.get('top_selling_category_name', 'N/A')
         if top_category != 'N/A':
             elements.append(Paragraph(f"🏆 <b>Top Performing Category:</b> {top_category}", styles['EnhancedBody']))
-        
+
         # Revenue insights
         total_revenue = report.get('total_revenue', 0)
         if total_revenue > 0:
             elements.append(Paragraph(f"💰 <b>Revenue Performance:</b> Generated ${total_revenue:,.2f} in total sales", styles['EnhancedBody']))
-        
+
         # Order insights
         total_orders = report.get('total_orders', 0)
         if total_orders > 0:
             avg_order = total_revenue / total_orders
             elements.append(Paragraph(f"📦 <b>Order Insights:</b> {total_orders:,} orders with average value of ${avg_order:.2f}", styles['EnhancedBody']))
-        
+
         elements.append(Spacer(1, 30))
         return elements
-    
+
     def _create_footer_section(self, styles) -> List:
         """Create footer section."""
         elements = []
         elements.append(Spacer(1, 50))
         elements.append(Paragraph("--- End of Report ---", styles['EnhancedBody']))
-        elements.append(Paragraph("This report was automatically generated by the Enhanced Sales Analytics System", 
-                                 styles['EnhancedBody']))
+        elements.append(Paragraph("This report was automatically generated by the Enhanced Sales Analytics System",
+                                  styles['EnhancedBody']))
         return elements
-    
+
     def _cleanup_temp_files(self, report_id: str):
         """Clean up temporary chart files."""
         temp_files = [
             f"revenue_{report_id}.png",
             f"products_{report_id}.png"
         ]
-        
+
         for file_path in temp_files:
             try:
                 if os.path.exists(file_path):
@@ -607,12 +669,41 @@ if __name__ == "__main__":
         },
         'top_selling_category_name': 'Fridge Magnets'
     }
-    
+
     # Generate comprehensive report
     generator = SalesReportGenerator()
     result = generator.generate_comprehensive_report(sample_report, "sample_001", "enhanced_sales_report.pdf")
-    
+
     if result:
         print(f"Enhanced sales report generated successfully: {result}")
     else:
         print("Failed to generate sales report")
+
+    # Example order history data
+    sample_order_history = [
+        {
+            'order_id': 'ORD001',
+            'date': '2024-10-01',
+            'items': [
+                {'name': 'Custom Logo Magnets', 'quantity': 10, 'price': 25.00},
+                {'name': 'Business Card Set (500pc)', 'quantity': 5, 'price': 50.00}
+            ],
+            'total': 375.00
+        },
+        {
+            'order_id': 'ORD002',
+            'date': '2024-10-15',
+            'items': [
+                {'name': 'Photo Magnet 4x6', 'quantity': 20, 'price': 15.00}
+            ],
+            'total': 300.00
+        }
+    ]
+
+    # Generate order history report
+    order_history_result = generator.generate_order_history_report(sample_order_history, "John Doe", "john_doe_order_history.pdf")
+
+    if order_history_result:
+        print(f"Order history report generated successfully: {order_history_result}")
+    else:
+        print("Failed to generate order history report")

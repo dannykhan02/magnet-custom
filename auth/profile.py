@@ -143,3 +143,34 @@ def logout_all_devices():
         db.session.rollback()
         logger.error(f"Logout all devices failed: {str(e)}")
         return jsonify({"msg": "Logout all failed", "error": str(e)}), 500
+    
+@profile_bp.route('/delete-account', methods=['DELETE'])
+@jwt_required()
+def delete_account():
+    """Permanently delete the logged-in user's account"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+
+    if not user:
+        return jsonify({"msg": "User not found"}), 404
+
+    try:
+        # Optionally blacklist the current token (logout)
+        token = get_jwt()
+        jti = token.get("jti")
+
+        if jti:
+            existing = TokenBlocklist.query.filter_by(jti=jti).first()
+            if not existing:
+                db.session.add(TokenBlocklist(jti=jti, user_id=user_id))
+
+        # Delete the user
+        db.session.delete(user)
+        db.session.commit()
+
+        return jsonify({"msg": "Your account has been deleted successfully."}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting account: {str(e)}")
+        return jsonify({"msg": "Failed to delete account", "error": str(e)}), 500

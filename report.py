@@ -538,9 +538,90 @@ class ReportChartsResource(Resource):
             logger.error(f"Error generating {chart_type} chart: {str(e)}", exc_info=True)
             return {"message": f"An error occurred while generating the {chart_type} chart"}, 500
 
+class UserOrderHistoryResource(Resource):
+    """
+    Resource for users to download their order history as a PDF.
+    """
+
+    @jwt_required()
+    def get(self, user_id):
+        """
+        Download a user's order history as a PDF.
+        """
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+
+        # Check if the current user is an admin or the user themselves
+        if not current_user or (current_user.role != UserRole.ADMIN and current_user_id != user_id):
+            return {"message": "Unauthorized access"}, 403
+
+        try:
+            user = User.query.get(user_id)
+            if not user:
+                return {"message": "User not found"}, 404
+
+            # Collect user's order history
+            orders = Order.query.filter_by(user_id=user_id).all()
+            order_history = []
+
+            for order in orders:
+                order_data = {
+                    'order_id': order.id,
+                    'date': order.created_at.strftime('%Y-%m-%d'),
+                    'items': [],
+                    'total': float(order.total_amount)
+                }
+
+                for item in order.order_items:
+                    product = Product.query.get(item.product_id)
+                    if product:
+                        order_data['items'].append({
+                            'name': product.name,
+                            'quantity': item.quantity,
+                            'price': float(item.unit_price)
+                        })
+
+                order_history.append(order_data)
+
+            # Generate PDF for order history
+            generator = SalesReportGenerator()
+            pdf_filename = f"order_history_{user.username}_{user_id}.pdf"
+            temp_pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
+
+            result_path = generator.generate_order_history_report(
+                order_history,
+                user.username,
+                temp_pdf_path
+            )
+
+            if not result_path or not os.path.exists(result_path):
+                return {"message": "Failed to generate order history PDF"}, 500
+
+            # Read the generated PDF
+            with open(result_path, 'rb') as pdf_file:
+                pdf_buffer = io.BytesIO(pdf_file.read())
+
+            # Clean up temporary file
+            try:
+                os.remove(result_path)
+            except Exception as e:
+                logger.warning(f"Could not remove temporary PDF file: {e}")
+
+            return send_file(
+                pdf_buffer,
+                as_attachment=True,
+                download_name=pdf_filename,
+                mimetype='application/pdf'
+            )
+
+        except Exception as e:
+            logger.error(f"Error generating order history PDF: {str(e)}", exc_info=True)
+            return {"message": "An error occurred while generating the order history PDF"}, 500
+
 def register_report_resources(api):
     """Registers the enhanced Report resource routes with Flask-RESTful API."""
     api.add_resource(ReportGenerationResource, "/admin/reports", "/admin/reports/<string:report_id>")
     api.add_resource(ReportPDFResource, "/admin/reports/<string:report_id>/download")
     api.add_resource(ReportEmailResource, "/admin/reports/<string:report_id>/email")
     api.add_resource(ReportChartsResource, "/admin/reports/<string:report_id>/charts/<string:chart_type>")
+    api.add_resource(UserOrderHistoryResource, "/users/<string:user_id>/order-history")
