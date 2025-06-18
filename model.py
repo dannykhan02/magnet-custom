@@ -13,7 +13,7 @@ db = SQLAlchemy()
 class TokenBlocklist(db.Model):
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     jti = db.Column(db.String(36), nullable=False, index=True)
-    user_id = db.Column(String(36), nullable=False)  
+    user_id = db.Column(String(36), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 # Enum definitions
@@ -60,11 +60,11 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    # Relationships
-    orders = db.relationship('Order', back_populates='user', foreign_keys='Order.user_id', lazy=True)
-    approved_orders = db.relationship('Order', back_populates='approved_by_user', foreign_keys='Order.approved_by', lazy=True)
-    generated_reports = db.relationship('Report', back_populates='generated_by_user', foreign_keys='Report.generated_by_user_id', lazy=True)
-    created_products = db.relationship('Product', foreign_keys='Product.created_by', lazy=True)
+    # Relationships with cascade delete
+    orders = db.relationship('Order', back_populates='user', foreign_keys='Order.user_id', lazy=True, cascade="all, delete-orphan")
+    approved_orders = db.relationship('Order', back_populates='approved_by_user', foreign_keys='Order.approved_by', lazy=True, cascade="all, delete-orphan")
+    generated_reports = db.relationship('Report', back_populates='generated_by_user', foreign_keys='Report.generated_by_user_id', lazy=True, cascade="all, delete-orphan")
+    created_products = db.relationship('Product', foreign_keys='Product.created_by', lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password = generate_password_hash(password)

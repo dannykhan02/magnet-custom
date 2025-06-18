@@ -147,7 +147,7 @@ def logout_all_devices():
 @profile_bp.route('/delete-account', methods=['DELETE'])
 @jwt_required()
 def delete_account():
-    """Permanently delete the logged-in user's account"""
+    """Permanently delete the logged-in user's account and related data"""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
@@ -164,11 +164,11 @@ def delete_account():
             if not existing:
                 db.session.add(TokenBlocklist(jti=jti, user_id=user_id))
 
-        # Delete the user
+        # Delete the user and related data via cascade
         db.session.delete(user)
         db.session.commit()
 
-        return jsonify({"msg": "Your account has been deleted successfully."}), 200
+        return jsonify({"msg": "Your account and related data have been deleted successfully."}), 200
 
     except Exception as e:
         db.session.rollback()
