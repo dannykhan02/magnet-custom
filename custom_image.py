@@ -316,7 +316,6 @@ class CustomImageResource(Resource):
             custom_image.order_item_id = new_order_item_id
             custom_image.updated_at = datetime.utcnow()  # Assuming you have this field
 
-            # Update Cloudinary public_id to reflect new order item
             try:
                 old_public_id = custom_image.cloudinary_public_id
                 # Create new public_id with new order_item_id
