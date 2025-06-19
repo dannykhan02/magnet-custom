@@ -99,7 +99,7 @@ class OrderResource(Resource):
 
     @jwt_required()
     def post(self):
-        """Create a new order (Users can create orders)."""
+        """Create a new order with minimal required data (order items only)."""
         try:
             current_user_id = get_jwt_identity()
             user = User.query.get(current_user_id)
@@ -111,8 +111,8 @@ class OrderResource(Resource):
             if not data:
                 return {"message": "No data provided"}, 400
 
-            # Validate required fields
-            required_fields = [ "order_items"]
+            # Validate required fields (only order_items now required)
+            required_fields = ["order_items"]
             for field in required_fields:
                 if field not in data:
                     return {"message": f"Missing field: {field}"}, 400
@@ -121,13 +121,6 @@ class OrderResource(Resource):
             order_items_data = data.get("order_items", [])
             if not order_items_data:
                 return {"message": "Order must contain at least one item"}, 400
-
-            # Validate pickup point if provided
-            pickup_point_id = data.get("pickup_point_id")
-            if pickup_point_id:
-                pickup_point = PickupPoint.query.get(pickup_point_id)
-                if not pickup_point or not pickup_point.is_active:
-                    return {"message": "Invalid or inactive pickup point"}, 400
 
             # Calculate total amount and validate products
             total_amount = Decimal('0.00')
@@ -163,16 +156,18 @@ class OrderResource(Resource):
             while Order.query.filter_by(order_number=order_number).first():
                 order_number = generate_order_number()
 
-            # Create Order instance
+            # Create Order instance with minimal required data
             order = Order(
                 user_id=current_user_id,
                 order_number=order_number,
                 total_amount=total_amount,
-                customer_name=data["customer_name"],
-                customer_phone=data["customer_phone"],
+                status='draft',  # Set status as draft since details are incomplete
+                # Optional fields - can be None initially
+                customer_name=data.get("customer_name"),
+                customer_phone=data.get("customer_phone"),
                 delivery_address=data.get("delivery_address"),
                 city=data.get("city"),
-                pickup_point_id=pickup_point_id,
+                pickup_point_id=data.get("pickup_point_id"),
                 order_notes=data.get("order_notes")
             )
 
@@ -198,7 +193,8 @@ class OrderResource(Resource):
             return {
                 "message": "Order created successfully", 
                 "order": order.as_dict(), 
-                "id": order.id
+                "id": order.id,
+                "status": "draft" if not all([order.customer_name, order.customer_phone]) else "pending"
             }, 201
 
         except Exception as e:
@@ -206,6 +202,164 @@ class OrderResource(Resource):
             logger.error(f"Error creating order: {str(e)}")
             return {"error": str(e)}, 500
 
+    @jwt_required()
+    def put(self, order_id):
+        """Update order details (customer info, pickup points, etc.)."""
+        try:
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            
+            if not user:
+                return {"message": "User not found"}, 404
+
+            # Get the order
+            order = Order.query.filter_by(id=order_id, user_id=current_user_id).first()
+            if not order:
+                return {"message": "Order not found or access denied"}, 404
+
+            # Check if order can be modified (only draft and pending orders)
+            if order.status not in ['draft', 'pending']:
+                return {"message": f"Cannot modify order with status: {order.status}"}, 400
+
+            data = request.get_json()
+            if not data:
+                return {"message": "No data provided"}, 400
+
+            # Validate pickup point if provided
+            pickup_point_id = data.get("pickup_point_id")
+            if pickup_point_id:
+                pickup_point = PickupPoint.query.get(pickup_point_id)
+                if not pickup_point or not pickup_point.is_active:
+                    return {"message": "Invalid or inactive pickup point"}, 400
+
+            # Update order fields
+            updatable_fields = [
+                'customer_name', 'customer_phone', 'delivery_address', 
+                'city', 'pickup_point_id', 'order_notes'
+            ]
+            
+            updated_fields = []
+            for field in updatable_fields:
+                if field in data:
+                    setattr(order, field, data[field])
+                    updated_fields.append(field)
+
+            # Update status based on completeness
+            if order.customer_name and order.customer_phone:
+                if order.status == 'draft':
+                    order.status = 'pending'
+            
+            # Add timestamp for last update
+            order.updated_at = datetime.utcnow()
+
+            db.session.commit()
+            
+            return {
+                "message": "Order updated successfully",
+                "order": order.as_dict(),
+                "updated_fields": updated_fields,
+                "status": order.status
+            }, 200
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error updating order: {str(e)}")
+            return {"error": str(e)}, 500
+
+    @jwt_required()
+    def patch(self, order_id):
+        """Add or modify order items for existing order."""
+        try:
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            
+            if not user:
+                return {"message": "User not found"}, 404
+
+            # Get the order
+            order = Order.query.filter_by(id=order_id, user_id=current_user_id).first()
+            if not order:
+                return {"message": "Order not found or access denied"}, 404
+
+            # Check if order can be modified
+            if order.status not in ['draft', 'pending']:
+                return {"message": f"Cannot modify order items with status: {order.status}"}, 400
+
+            data = request.get_json()
+            if not data:
+                return {"message": "No data provided"}, 400
+
+            action = data.get('action', 'add')  # 'add', 'remove', 'update'
+            order_items_data = data.get("order_items", [])
+
+            if action == 'add':
+                # Add new items to existing order
+                total_addition = Decimal('0.00')
+                
+                for item_data in order_items_data:
+                    if 'product_id' not in item_data or 'quantity' not in item_data:
+                        return {"message": "Each order item must have product_id and quantity"}, 400
+                    
+                    product = Product.query.get(item_data['product_id'])
+                    if not product or not product.is_active:
+                        return {"message": f"Product not found or inactive: {item_data['product_id']}"}, 400
+                    
+                    quantity = int(item_data['quantity'])
+                    if quantity <= 0:
+                        return {"message": "Quantity must be greater than 0"}, 400
+                    
+                    if product.quantity < quantity:
+                        return {"message": f"Insufficient stock for product: {product.name}. Available: {product.quantity}"}, 400
+                    
+                    item_total = product.price * quantity
+                    total_addition += item_total
+                    
+                    # Create new order item
+                    order_item = OrderItem(
+                        order_id=order.id,
+                        product_id=product.id,
+                        quantity=quantity,
+                        unit_price=product.price,
+                        total_price=item_total
+                    )
+                    db.session.add(order_item)
+                    
+                    # Update product quantity
+                    product.quantity -= quantity
+
+                # Update order total
+                order.total_amount += total_addition
+                
+            elif action == 'remove':
+                # Remove specified items
+                item_ids = data.get('order_item_ids', [])
+                for item_id in item_ids:
+                    order_item = OrderItem.query.filter_by(id=item_id, order_id=order.id).first()
+                    if order_item:
+                        # Restore product quantity
+                        product = Product.query.get(order_item.product_id)
+                        if product:
+                            product.quantity += order_item.quantity
+                        
+                        # Update order total
+                        order.total_amount -= order_item.total_price
+                        
+                        # Remove item
+                        db.session.delete(order_item)
+
+            order.updated_at = datetime.utcnow()
+            db.session.commit()
+            
+            return {
+                "message": f"Order items {action}ed successfully",
+                "order": order.as_dict(),
+                "total_amount": float(order.total_amount)
+            }, 200
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error modifying order items: {str(e)}")
+            return {"error": str(e)}, 500
     @jwt_required()
     def put(self, order_id):
         """Update an existing order. Users can update their own orders, admins can update any order."""
