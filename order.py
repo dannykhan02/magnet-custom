@@ -161,7 +161,7 @@ class OrderResource(Resource):
                 user_id=current_user_id,
                 order_number=order_number,
                 total_amount=total_amount,
-                status='draft',  # Set status as draft since details are incomplete
+                status= OrderStatus.PENDING,  # Initial status
                 # Optional fields - can be None initially
                 customer_name=data.get("customer_name"),
                 customer_phone=data.get("customer_phone"),
