@@ -214,12 +214,12 @@ class Order(db.Model):
     __tablename__ = 'orders'
 
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
     order_number = db.Column(db.String(255), nullable=False, unique=True)
     status = db.Column(db.Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
-    total_amount = db.Column(db.Numeric(10, 2), nullable=False)
-    customer_name = db.Column(db.String(255), nullable=False)
-    customer_phone = db.Column(db.String(255), nullable=False)
+    total_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    customer_name = db.Column(db.String(255), nullable=True)
+    customer_phone = db.Column(db.String(255), nullable=True)
     delivery_address = db.Column(db.Text, nullable=True)
     city = db.Column(db.String(255), nullable=True)
     pickup_point_id = db.Column(String(36), db.ForeignKey('pickup_points.id'), nullable=True)

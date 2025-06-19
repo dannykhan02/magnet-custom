@@ -289,7 +289,96 @@ class CustomImageResource(Resource):
             db.session.rollback()
             logger.error(f"Error uploading custom image: {str(e)}")
             return {"error": str(e)}, 500
+    @jwt_required()
+    def put(self, image_id):
+        """Update the order_item_id for a custom image."""
+        try:
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            
+            if not user:
+                return {"message": "User not found"}, 404
 
+            # Find the existing custom image
+            if user.role == UserRole.ADMIN:
+                custom_image = CustomImage.query.get(image_id)
+            else:
+                custom_image = CustomImage.query.join(OrderItem).join(Order).filter(
+                    CustomImage.id == image_id,
+                    Order.user_id == current_user_id
+                ).first()
+
+            if not custom_image:
+                return {"message": "Custom image not found"}, 404
+
+            # Get JSON data
+            data = request.get_json()
+            if not data:
+                return {"message": "No data provided"}, 400
+
+            # Validate required field
+            if 'order_item_id' not in data:
+                return {"message": "Missing field: order_item_id"}, 400
+
+            new_order_item_id = data['order_item_id']
+
+            # Validate new order item exists and belongs to user
+            if user.role == UserRole.ADMIN:
+                new_order_item = OrderItem.query.get(new_order_item_id)
+            else:
+                new_order_item = OrderItem.query.join(Order).filter(
+                    OrderItem.id == new_order_item_id,
+                    Order.user_id == current_user_id
+                ).first()
+
+            if not new_order_item:
+                return {"message": "New order item not found"}, 404
+
+            # Check if another custom image already exists for the new order item
+            existing_image = CustomImage.query.filter(
+                CustomImage.order_item_id == new_order_item_id,
+                CustomImage.id != image_id  # Exclude current image
+            ).first()
+            
+            if existing_image:
+                return {"message": "Custom image already exists for the target order item"}, 400
+
+            # Update the order_item_id
+            custom_image.order_item_id = new_order_item_id
+            custom_image.updated_at = datetime.utcnow()  # Assuming you have this field
+
+            # Update Cloudinary public_id to reflect new order item
+            try:
+                old_public_id = custom_image.cloudinary_public_id
+                # Create new public_id with new order_item_id
+                if 'pending_' in old_public_id:
+                    new_public_id = f"pending_{new_order_item_id}_{int(datetime.utcnow().timestamp())}"
+                elif 'approved_' in old_public_id:
+                    new_public_id = f"approved_{new_order_item_id}_{int(datetime.utcnow().timestamp())}"
+                else:
+                    new_public_id = f"{new_order_item_id}_{int(datetime.utcnow().timestamp())}"
+                
+                # Rename the image in Cloudinary
+                rename_result = cloudinary.uploader.rename(old_public_id, new_public_id)
+                custom_image.cloudinary_public_id = new_public_id
+                custom_image.image_url = rename_result.get('secure_url')
+                
+            except Exception as e:
+                logger.warning(f"Failed to rename image in Cloudinary: {str(e)}")
+                # Continue with database update even if Cloudinary rename fails
+
+            db.session.commit()
+
+            return {
+                "message": "Custom image order item updated successfully",
+                "custom_image": custom_image.as_dict(),
+                "id": custom_image.id
+            }, 200
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error updating custom image order item: {str(e)}")
+            return {"error": str(e)}, 500
     @jwt_required()
     def delete(self, image_id):
         """Delete a custom image and remove from Cloudinary."""
