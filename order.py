@@ -112,7 +112,7 @@ class OrderResource(Resource):
                 return {"message": "No data provided"}, 400
 
             # Validate required fields
-            required_fields = ["customer_name", "customer_phone", "order_items"]
+            required_fields = [ "order_items"]
             for field in required_fields:
                 if field not in data:
                     return {"message": f"Missing field: {field}"}, 400
