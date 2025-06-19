@@ -43,7 +43,10 @@ class PaymentStatus(enum.Enum):
     CANCELED = 'canceled'
     CHARGEBACK = 'chargeback'
     ON_HOLD = 'on_hold'
-
+class ImageApprovalStatus(enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved" 
+    REJECTED = "rejected"
 class User(db.Model):
     __tablename__ = 'users'
 
@@ -323,30 +326,49 @@ class Payment(db.Model):
             "payment_date": self.payment_date.isoformat(),
             "phone_number": self.phone_number
         }
-
-# Custom Image model
 class CustomImage(db.Model):
     __tablename__ = 'custom_images'
-
+     
     id = db.Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    order_item_id = db.Column(String(36), db.ForeignKey('order_items.id'), nullable=False)
+ 
+    order_item_id = db.Column(String(36), db.ForeignKey('order_items.id'), nullable=True)
     product_id = db.Column(String(36), db.ForeignKey('products.id'), nullable=True)
+   
+    user_id = db.Column(String(36), db.ForeignKey('users.id'), nullable=False)
     image_url = db.Column(db.Text, nullable=False)
     image_name = db.Column(db.String(255), nullable=True)
+    cloudinary_public_id = db.Column(db.String(255), nullable=True)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    # Relationships
+    
+    
+    is_temporary = db.Column(db.Boolean, default=False, nullable=False)
+    
+ 
+    approval_status = db.Column(db.Enum(ImageApprovalStatus), default=ImageApprovalStatus.PENDING, nullable=False)
+    approved_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
+    approval_date = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
+ 
+   
     order_item = db.relationship('OrderItem', back_populates='custom_images_list')
     product = db.relationship('Product', back_populates='custom_images')
-
+    approver = db.relationship('User', foreign_keys=[approved_by])
+    uploader = db.relationship('User', foreign_keys=[user_id])
+ 
     def as_dict(self):
         return {
             "id": self.id,
             "order_item_id": self.order_item_id,
             "product_id": self.product_id,
+            "user_id": self.user_id,
             "image_url": self.image_url,
             "image_name": self.image_name,
-            "upload_date": self.upload_date.isoformat()
+            "upload_date": self.upload_date.isoformat(),
+            "is_temporary": self.is_temporary,
+            "approval_status": self.approval_status.value,
+            "approved_by": self.approved_by,
+            "approval_date": self.approval_date.isoformat() if self.approval_date else None,
+            "rejection_reason": self.rejection_reason
         }
 
 # Report model
