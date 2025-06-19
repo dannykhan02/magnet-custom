@@ -43,7 +43,10 @@ class PaymentStatus(enum.Enum):
     CANCELED = 'canceled'
     CHARGEBACK = 'chargeback'
     ON_HOLD = 'on_hold'
-
+class ImageApprovalStatus(enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved" 
+    REJECTED = "rejected"
 class User(db.Model):
     __tablename__ = 'users'
 
@@ -323,8 +326,6 @@ class Payment(db.Model):
             "payment_date": self.payment_date.isoformat(),
             "phone_number": self.phone_number
         }
-
-# Custom Image model
 class CustomImage(db.Model):
     __tablename__ = 'custom_images'
 
@@ -333,11 +334,19 @@ class CustomImage(db.Model):
     product_id = db.Column(String(36), db.ForeignKey('products.id'), nullable=True)
     image_url = db.Column(db.Text, nullable=False)
     image_name = db.Column(db.String(255), nullable=True)
+    cloudinary_public_id = db.Column(db.String(255), nullable=True)  # Store Cloudinary public ID for deletion
     upload_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    # New approval fields
+    approval_status = db.Column(db.Enum(ImageApprovalStatus), default=ImageApprovalStatus.PENDING, nullable=False)
+    approved_by = db.Column(String(36), db.ForeignKey('users.id'), nullable=True)
+    approval_date = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.Text, nullable=True)
 
     # Relationships
     order_item = db.relationship('OrderItem', back_populates='custom_images_list')
     product = db.relationship('Product', back_populates='custom_images')
+    approver = db.relationship('User', foreign_keys=[approved_by])
 
     def as_dict(self):
         return {
@@ -346,9 +355,12 @@ class CustomImage(db.Model):
             "product_id": self.product_id,
             "image_url": self.image_url,
             "image_name": self.image_name,
-            "upload_date": self.upload_date.isoformat()
+            "upload_date": self.upload_date.isoformat(),
+            "approval_status": self.approval_status.value,
+            "approved_by": self.approved_by,
+            "approval_date": self.approval_date.isoformat() if self.approval_date else None,
+            "rejection_reason": self.rejection_reason
         }
-
 # Report model
 class Report(db.Model):
     __tablename__ = 'report'

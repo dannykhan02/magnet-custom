@@ -5,7 +5,7 @@ from flask import request, jsonify
 from flask_restful import Resource
 from datetime import datetime
 from werkzeug.utils import secure_filename
-from model import db, CustomImage, OrderItem, Order, Product, User, UserRole
+from model import db, CustomImage, OrderItem, Order, Product, User, UserRole, ImageApprovalStatus
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import logging
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -114,7 +114,7 @@ class CustomImageResource(Resource):
 
     @jwt_required()
     def post(self):
-        """Upload a custom image for an order item."""
+        """Upload a custom image for an order item (starts as PENDING)."""
         try:
             current_user_id = get_jwt_identity()
             user = User.query.get(current_user_id)
@@ -122,9 +122,8 @@ class CustomImageResource(Resource):
             if not user:
                 return {"message": "User not found"}, 404
 
-            # Handle both form data and JSON data
+            # Handle file upload
             if request.content_type and 'multipart/form-data' in request.content_type:
-                # Handle file upload
                 data = request.form.to_dict()
                 files = request.files.get('image')
                 
@@ -134,101 +133,73 @@ class CustomImageResource(Resource):
                 if files.filename == '':
                     return {"message": "No file selected"}, 400
                 
+                # Validate required fields
+                if 'order_item_id' not in data:
+                    return {"message": "Missing field: order_item_id"}, 400
+
+                order_item_id = data['order_item_id']
+
+                # Validate order item exists and belongs to user
+                if user.role == UserRole.ADMIN:
+                    order_item = OrderItem.query.get(order_item_id)
+                else:
+                    order_item = OrderItem.query.join(Order).filter(
+                        OrderItem.id == order_item_id,
+                        Order.user_id == current_user_id
+                    ).first()
+
+                if not order_item:
+                    return {"message": "Order item not found"}, 404
+
+                # Check if custom image already exists for this order item
+                existing_image = CustomImage.query.filter_by(order_item_id=order_item_id).first()
+                if existing_image:
+                    return {"message": "Custom image already exists for this order item"}, 400
+
+                # Validate file type
+                if not allowed_file(files.filename):
+                    return {"message": "Invalid file type. Allowed types: PNG, JPG, JPEG, GIF, WEBP"}, 400
                 
-        
+                # Upload to Cloudinary with pending status folder
+                try:
+                    upload_result = cloudinary.uploader.upload(
+                        files,
+                        folder="custom_images/pending",  # Separate folder for pending images
+                        resource_type="auto",
+                        public_id=f"pending_{order_item_id}_{int(datetime.utcnow().timestamp())}"
+                    )
+                    image_url = upload_result.get('secure_url')
+                    cloudinary_public_id = upload_result.get('public_id')
+                except Exception as e:
+                    logger.error(f"Error uploading image to Cloudinary: {str(e)}")
+                    return {"message": "Failed to upload image"}, 500
+
+                # Create CustomImage instance with PENDING status
+                custom_image = CustomImage(
+                    order_item_id=order_item_id,
+                    image_url=image_url,
+                    image_name=files.filename,
+                    cloudinary_public_id=cloudinary_public_id,
+                    approval_status=ImageApprovalStatus.PENDING
+                )
+
+                db.session.add(custom_image)
+                db.session.commit()
                 
-                # Generate unique filename and save
-                image_url = None
-                if 'file' in files:
-                    file = files['file']
-                    if file and file.filename != '':
-                        if not allowed_file(file.filename):
-                            return {"message": "Invalid file type. Allowed types: PNG, JPG, JPEG, GIF, WEBP"}, 400
-                        
-                        try:
-                            upload_result = cloudinary.uploader.upload(
-                                file,
-                                folder="event_images",
-                                resource_type="auto"
-                            )
-                            image_url = upload_result.get('secure_url')
-                        except Exception as e:
-                            logger.error(f"Error uploading event image: {str(e)}")
-                            return {"message": "Failed to upload event image"}, 500
-             
-                
-            else:
-                # Handle JSON data with base64 image
-                data = request.get_json()
-                if not data:
-                    return {"message": "No data provided"}, 400
-                
-                if 'image_data' not in data:
-                    return {"message": "No image data provided"}, 400
-                
-                image_name = data.get('image_name', 'uploaded_image.jpg')
-                # image_url, message = process_base64_image(data['image_data'], image_name)
-                
-                
-
-            # Validate required fields
-            if 'order_item_id' not in data:
-                return {"message": "Missing field: order_item_id"}, 400
-
-            order_item_id = data['order_item_id']
-
-            # Validate order item exists and belongs to user (unless admin)
-            if user.role == UserRole.ADMIN:
-                order_item = OrderItem.query.get(order_item_id)
-            else:
-                order_item = OrderItem.query.join(Order).filter(
-                    OrderItem.id == order_item_id,
-                    Order.user_id == current_user_id
-                ).first()
-
-            if not order_item:
-                return {"message": "Order item not found"}, 404
-
-            # Check if custom image already exists for this order item
-            existing_image = CustomImage.query.filter_by(order_item_id=order_item_id).first()
-            if existing_image:
-                return {"message": "Custom image already exists for this order item"}, 400
-
-            # Get product_id if provided
-            product_id = data.get('product_id')
-            if product_id:
-                product = Product.query.get(product_id)
-                if not product:
-                    return {"message": "Product not found"}, 404
-
-            # Create CustomImage instance
-            custom_image = CustomImage(
-                order_item_id=order_item_id,
-                product_id=product_id,
-                image_url=image_url,
-                image_name=image_name
-            )
-
-            db.session.add(custom_image)
-            db.session.commit()
-            
-            return {
-                "message": "Custom image uploaded successfully", 
-                "custom_image": custom_image.as_dict(), 
-                "id": custom_image.id
-            }, 201
+                return {
+                    "message": "Custom image uploaded successfully and pending approval", 
+                    "custom_image": custom_image.as_dict(), 
+                    "id": custom_image.id
+                }, 201
 
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error uploading custom image: {str(e)}")
             return {"error": str(e)}, 500
 
- 
-        
-
     @jwt_required()
     def delete(self, image_id):
-        """Delete a custom image."""
+        """Delete a custom image and remove from Cloudinary."""
         try:
             current_user_id = get_jwt_identity()
             user = User.query.get(current_user_id)
@@ -240,7 +211,6 @@ class CustomImageResource(Resource):
             if user.role == UserRole.ADMIN:
                 custom_image = CustomImage.query.get(image_id)
             else:
-                # Regular user can only delete images for their own orders
                 custom_image = CustomImage.query.join(OrderItem).join(Order).filter(
                     CustomImage.id == image_id,
                     Order.user_id == current_user_id
@@ -249,12 +219,12 @@ class CustomImageResource(Resource):
             if not custom_image:
                 return {"error": "Custom image not found"}, 404
 
-            # Delete the physical file
-            if custom_image.image_url and os.path.exists(custom_image.image_url):
+            # Delete from Cloudinary using public_id
+            if custom_image.cloudinary_public_id:
                 try:
-                    os.remove(custom_image.image_url)
+                    cloudinary.uploader.destroy(custom_image.cloudinary_public_id)
                 except Exception as e:
-                    logger.warning(f"Could not delete image file: {str(e)}")
+                    logger.warning(f"Failed to delete image from Cloudinary: {str(e)}")
 
             db.session.delete(custom_image)
             db.session.commit()
@@ -262,22 +232,22 @@ class CustomImageResource(Resource):
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error deleting custom image id {image_id}: {str(e)}", exc_info=True)
+            logger.error(f"Error deleting custom image id {image_id}: {str(e)}")
             return {"error": "An unexpected error occurred during image deletion."}, 500
 
 
 class CustomImageApprovalResource(Resource):
-    """Resource for admin to approve custom images and assign products."""
+    """Resource for admin to approve/reject custom images."""
     
     @jwt_required()
     def put(self, image_id):
-        """Approve custom image and assign product (Admin only)."""
+        """Approve or reject custom image (Admin only)."""
         try:
             current_user_id = get_jwt_identity()
             user = User.query.get(current_user_id)
             
             if not user or user.role != UserRole.ADMIN:
-                return {"message": "Only admins can approve custom images"}, 403
+                return {"message": "Only admins can approve/reject custom images"}, 403
 
             custom_image = CustomImage.query.get(image_id)
             if not custom_image:
@@ -287,33 +257,73 @@ class CustomImageApprovalResource(Resource):
             if not data:
                 return {"error": "No data provided"}, 400
 
-            # Assign product to custom image
-            if "product_id" in data:
-                product_id = data["product_id"]
-                if product_id:
-                    product = Product.query.get(product_id)
-                    if not product:
-                        return {"error": "Product not found"}, 400
-                    
-                    # Check if product supports custom images (you might want to add this field to Product model)
-                    custom_image.product_id = product_id
-                else:
-                    custom_image.product_id = None
+            action = data.get('action')  # 'approve' or 'reject'
+            
+            if action == 'approve':
+                # Move image from pending to approved folder in Cloudinary
+                if custom_image.cloudinary_public_id:
+                    try:
+                        # Create new public_id for approved folder
+                        new_public_id = custom_image.cloudinary_public_id.replace('pending_', 'approved_')
+                        new_public_id = new_public_id.replace('custom_images/pending/', 'custom_images/approved/')
+                        
+                        # Move the image
+                        cloudinary.uploader.rename(
+                            custom_image.cloudinary_public_id,
+                            f"custom_images/approved/{new_public_id}"
+                        )
+                        
+                        # Update the record
+                        custom_image.cloudinary_public_id = f"custom_images/approved/{new_public_id}"
+                        custom_image.image_url = cloudinary.CloudinaryImage(f"custom_images/approved/{new_public_id}").build_url()
+                        
+                    except Exception as e:
+                        logger.error(f"Error moving image to approved folder: {str(e)}")
+                        return {"error": "Failed to move image to approved folder"}, 500
 
-            # Update image name if provided
-            if "image_name" in data:
-                custom_image.image_name = data["image_name"]
+                custom_image.approval_status = ImageApprovalStatus.APPROVED
+                custom_image.approved_by = current_user_id
+                custom_image.approval_date = datetime.utcnow()
+                
+                # Assign product if provided
+                if "product_id" in data:
+                    product_id = data["product_id"]
+                    if product_id:
+                        product = Product.query.get(product_id)
+                        if not product:
+                            return {"error": "Product not found"}, 400
+                        custom_image.product_id = product_id
+
+                message = "Custom image approved successfully"
+                
+            elif action == 'reject':
+                # Delete from Cloudinary since it's rejected
+                if custom_image.cloudinary_public_id:
+                    try:
+                        cloudinary.uploader.destroy(custom_image.cloudinary_public_id)
+                    except Exception as e:
+                        logger.warning(f"Failed to delete rejected image from Cloudinary: {str(e)}")
+
+                custom_image.approval_status = ImageApprovalStatus.REJECTED
+                custom_image.approved_by = current_user_id
+                custom_image.approval_date = datetime.utcnow()
+                custom_image.rejection_reason = data.get('rejection_reason', 'No reason provided')
+                
+                message = "Custom image rejected successfully"
+                
+            else:
+                return {"error": "Invalid action. Use 'approve' or 'reject'"}, 400
 
             db.session.commit()
             
             return {
-                "message": "Custom image approved and product assigned successfully",
+                "message": message,
                 "custom_image": custom_image.as_dict()
             }, 200
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error approving custom image: {str(e)}")
+            logger.error(f"Error processing custom image approval: {str(e)}")
             return {"error": f"An error occurred: {str(e)}"}, 500
 
 
@@ -332,17 +342,18 @@ class AdminCustomImagesResource(Resource):
 
             page = request.args.get('page', 1, type=int)
             per_page = request.args.get('per_page', 10, type=int)
-            has_product = request.args.get('has_product', type=str)
+            status = request.args.get('status', type=str)  # pending, approved, rejected
             
             # Build query
             query = CustomImage.query
             
-            # Filter by product assignment if provided
-            if has_product:
-                if has_product.lower() == 'true':
-                    query = query.filter(CustomImage.product_id.isnot(None))
-                elif has_product.lower() == 'false':
-                    query = query.filter(CustomImage.product_id.is_(None))
+            # Filter by approval status if provided
+            if status:
+                try:
+                    status_enum = ImageApprovalStatus(status.lower())
+                    query = query.filter(CustomImage.approval_status == status_enum)
+                except ValueError:
+                    return {"error": "Invalid status. Use: pending, approved, rejected"}, 400
             
             # Get all custom images with pagination, ordered by upload date
             custom_images = query.order_by(CustomImage.upload_date.desc()).paginate(
@@ -392,6 +403,38 @@ class AdminCustomImagesResource(Resource):
             logger.error(f"Error fetching admin custom images: {str(e)}")
             return {"message": "Error fetching custom images"}, 500
 
+
+# Cleanup task for abandoned pending images (run as background job)
+def cleanup_abandoned_pending_images():
+    """Clean up pending images older than X days that haven't been processed."""
+    try:
+        from datetime import timedelta
+        
+        # Images pending for more than 7 days
+        cutoff_date = datetime.utcnow() - timedelta(days=7)
+        
+        abandoned_images = CustomImage.query.filter(
+            CustomImage.approval_status == ImageApprovalStatus.PENDING,
+            CustomImage.upload_date < cutoff_date
+        ).all()
+        
+        for image in abandoned_images:
+            # Delete from Cloudinary
+            if image.cloudinary_public_id:
+                try:
+                    cloudinary.uploader.destroy(image.cloudinary_public_id)
+                except Exception as e:
+                    logger.warning(f"Failed to delete abandoned image from Cloudinary: {str(e)}")
+            
+            # Delete from database
+            db.session.delete(image)
+        
+        db.session.commit()
+        logger.info(f"Cleaned up {len(abandoned_images)} abandoned pending images")
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error cleaning up abandoned images: {str(e)}")
 
 def register_custom_image_resources(api):
     """Registers the CustomImage resource routes with Flask-RESTful API."""
