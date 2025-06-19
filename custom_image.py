@@ -28,6 +28,99 @@ def allowed_file(filename):
 
 
 
+class TempimageResource(Resource):
+    @jwt_required()
+    def post(self):
+        try:
+            current_user_id = get_jwt_identity()
+            user = User.query.get(current_user_id)
+            
+            if not user:
+                return {"message": "User not found"}, 404
+            
+            # Handle file upload
+            if not request.content_type or 'multipart/form-data' not in request.content_type:
+                return {"message": "Content-Type must be multipart/form-data"}, 400
+            
+            files = request.files.get('image')
+            if not files or files.filename == '':
+                return {"message": "No image file provided"}, 400
+            
+            # Validate file type
+            if not allowed_file(files.filename):
+                return {"message": "Invalid file type. Allowed types: PNG, JPG, JPEG, GIF, WEBP"}, 400
+            
+            # Upload to Cloudinary in temp folder
+            try:
+                upload_result = cloudinary.uploader.upload(
+                    files,
+                    folder="custom_images/temp",
+                    resource_type="auto",
+                    public_id=f"temp_{current_user_id}_{int(datetime.utcnow().timestamp())}"
+                )
+                image_url = upload_result.get('secure_url')
+                cloudinary_public_id = upload_result.get('public_id')
+            except Exception as e:
+                logger.error(f"Error uploading image to Cloudinary: {str(e)}")
+                return {"message": "Failed to upload image"}, 500
+            
+            # Create CustomImage instance as temporary
+            custom_image = CustomImage(
+                user_id=current_user_id,
+                image_url=image_url,
+                image_name=files.filename,
+                cloudinary_public_id=cloudinary_public_id,
+                approval_status=ImageApprovalStatus.PENDING,
+                is_temporary=True,  # Mark as temporary
+                order_item_id=None,  # No order association yet
+                product_id=None
+            )
+            
+            db.session.add(custom_image)
+            db.session.commit()
+            
+            return {
+                "message": "Custom image uploaded successfully and pending approval",
+                "id": custom_image.id,
+                "image_url": custom_image.image_url,
+                "image_name": custom_image.image_name,
+                "approval_status": custom_image.approval_status.value
+            }, 201
+        
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error uploading temp custom image: {str(e)}")
+            return {"error": str(e)}, 500
+
+    @jwt_required()
+    def delete(self, image_id):
+        try:
+            current_user_id = get_jwt_identity()
+            
+            temp_image = CustomImage.query.filter_by(
+                id=image_id,
+                user_id=current_user_id,
+                is_temporary=True
+            ).first()
+            
+            if not temp_image:
+                return {"message": "Temporary image not found"}, 404
+                
+            # Delete from Cloudinary
+            if temp_image.cloudinary_public_id:
+                try:
+                    cloudinary.uploader.destroy(temp_image.cloudinary_public_id)
+                except Exception as e:
+                    logger.warning(f"Failed to delete temp image from Cloudinary: {str(e)}")
+            
+            db.session.delete(temp_image)
+            db.session.commit()
+            
+            return {"message": "Temporary image deleted successfully"}, 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error deleting temporary image id {image_id}: {str(e)}")
+            return {"error": "An unexpected error occurred during image deletion."}, 500
 
 
 class CustomImageResource(Resource):
@@ -441,3 +534,5 @@ def register_custom_image_resources(api):
     api.add_resource(CustomImageResource, "/custom-images", "/custom-images/<string:image_id>")
     api.add_resource(CustomImageApprovalResource, "/custom-images/<string:image_id>/approve")
     api.add_resource(AdminCustomImagesResource, "/admin/custom-images")
+    
+    api.add_resource(TempimageResource, "/temp-images", "/temp-images/<string:image_id>")
