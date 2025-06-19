@@ -284,7 +284,7 @@ class OrderItem(db.Model):
             "product_name": self.product.name if self.product else None,
             "quantity": self.quantity,
             "unit_price": float(self.unit_price),
-            "total_price": self.total_price,
+            "total_price": float(self.total_price),
             "custom_images": self.custom_images,
             "created_at": self.created_at.isoformat()
         }
