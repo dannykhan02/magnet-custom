@@ -268,13 +268,14 @@ class OrderItem(db.Model):
     unit_price = db.Column(db.Numeric(10, 2), nullable=False)
     custom_images = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    total_price = db.Column(db.Numeric(10, 2), nullable=False)
 
     # Relationships
     order = db.relationship('Order', back_populates='order_items')
     product = db.relationship('Product', back_populates='order_items')
     custom_images_list = db.relationship('CustomImage', back_populates='order_item', lazy=True)
 
-
+   
     def as_dict(self):
         return {
             "id": self.id,
