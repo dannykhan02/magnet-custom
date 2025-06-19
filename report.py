@@ -555,16 +555,17 @@ class UserOrderHistoryResource(Resource):
             return {"message": "User not found"}, 404
 
         try:
-            # Get user's orders
-            orders = Order.query.filter_by(user_id=current_user_id).all()
+            # Get user's orders, sorted by creation date for better history representation
+            orders = Order.query.filter_by(user_id=current_user_id).order_by(Order.created_at.desc()).all()
             order_history = []
 
             for order in orders:
                 order_data = {
                     'order_id': order.id,
-                    'date': order.created_at.strftime('%Y-%m-%d'),
+                    'date': order.created_at.strftime('%Y-%m-%d %H:%M:%S'), # Include time for more detail
                     'items': [],
-                    'total': float(order.total_amount)
+                    'total': float(order.total_amount),
+                    'status': order.status # Assuming an order status field
                 }
 
                 for item in order.order_items:
@@ -573,9 +574,9 @@ class UserOrderHistoryResource(Resource):
                         order_data['items'].append({
                             'name': product.name,
                             'quantity': item.quantity,
-                            'price': float(item.unit_price)
+                            'price': float(item.unit_price),
+                            'item_total': float(item.quantity * item.unit_price) # Add item total
                         })
-
                 order_history.append(order_data)
 
             # Generate the PDF
@@ -584,6 +585,8 @@ class UserOrderHistoryResource(Resource):
             pdf_filename = f"order_history_{username}_{user.id}.pdf"
             temp_pdf_path = os.path.join(tempfile.gettempdir(), pdf_filename)
 
+            # IMPORTANT: This method (`generate_order_history_report`)
+            # must be implemented in your SalesReportGenerator class.
             result_path = generator.generate_order_history_report(
                 order_history,
                 username,
@@ -609,8 +612,9 @@ class UserOrderHistoryResource(Resource):
             )
 
         except Exception as e:
-            logger.error(f"Error generating order history PDF: {str(e)}", exc_info=True)
-            return {"message": "An error occurred while generating the order history PDF"}, 500
+            logger.error(f"Error generating order history PDF for user {current_user_id}: {str(e)}", exc_info=True)
+            return {"message": "An error occurred while generating your order history PDF"}, 500
+
 
 def register_report_resources(api):
     """Registers the enhanced Report resource routes with Flask-RESTful API."""
