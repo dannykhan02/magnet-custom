@@ -274,9 +274,6 @@ class OrderItem(db.Model):
     product = db.relationship('Product', back_populates='order_items')
     custom_images_list = db.relationship('CustomImage', back_populates='order_item', lazy=True)
 
-    @property
-    def total_price(self):
-        return float(self.quantity * self.unit_price)
 
     def as_dict(self):
         return {
