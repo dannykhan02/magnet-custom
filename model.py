@@ -235,9 +235,10 @@ class Order(db.Model):
     order_items = db.relationship('OrderItem', back_populates='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', back_populates='order', lazy=True)
 
-    def __init__(self, user_id, order_number, total_amount, customer_name, customer_phone,
+    def __init__(self, user_id,status, order_number, total_amount =None, customer_name=None, customer_phone=None,
                  delivery_address=None, city=None, pickup_point_id=None, order_notes=None):
         self.user_id = user_id
+        self.status = status
         self.order_number = order_number
         self.total_amount = total_amount
         self.customer_name = customer_name
