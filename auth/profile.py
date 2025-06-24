@@ -6,9 +6,8 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
-
 from .utils import is_valid_phone, normalize_phone, validate_password
-from model import db, User,  TokenBlocklist
+from model import db, User, TokenBlocklist, PickupPoint
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ def get_profile():
 @profile_bp.route('/profile', methods=['PUT'])
 @jwt_required()
 def update_profile():
-    """Update user profile information"""
+    """Update user profile information including pickup point"""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
@@ -42,6 +41,9 @@ def update_profile():
         if 'name' in data:
             user.name = data['name'].strip()
 
+        if 'email' in data:
+            user.email = data['email'].strip()
+
         if 'phone' in data:
             phone = data['phone'].strip() if data['phone'] else None
             if phone and not is_valid_phone(phone):
@@ -51,8 +53,15 @@ def update_profile():
         if 'address' in data:
             user.address = data['address'].strip() if data['address'] else None
 
-        if 'county' in data:
-            user.county = data['county'].strip() if data['county'] else None
+        if 'city' in data:
+            user.city = data['city'].strip() if data['city'] else None
+
+        if 'pickup_point_id' in data:
+            pickup_point_id = data['pickup_point_id']
+            pickup_point = PickupPoint.query.get(pickup_point_id)
+            if not pickup_point:
+                return jsonify({"msg": "Pickup point not found"}), 404
+            user.pickup_point_id = pickup_point_id
 
         user.updated_at = datetime.utcnow()
         db.session.commit()
@@ -143,7 +152,7 @@ def logout_all_devices():
         db.session.rollback()
         logger.error(f"Logout all devices failed: {str(e)}")
         return jsonify({"msg": "Logout all failed", "error": str(e)}), 500
-    
+
 @profile_bp.route('/delete-account', methods=['DELETE'])
 @jwt_required()
 def delete_account():
