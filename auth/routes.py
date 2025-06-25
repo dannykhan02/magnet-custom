@@ -143,7 +143,7 @@ def forgot_password():
 
     serializer = URLSafeTimedSerializer(Config.SECRET_KEY)
     token = serializer.dumps(email, salt="reset-password-salt")
-    reset_link = f"{Config.FRONTEND_URL}/reset-password/{token}"
+    reset_link = f"{Config.FRONTEND_URL}reset-password/{token}"
 
     try:
         msg = Message("Password Reset Request", recipients=[email])
