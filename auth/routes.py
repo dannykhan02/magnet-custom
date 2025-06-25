@@ -1,4 +1,4 @@
-# auth/routes.py
+
 """Main authentication routes"""
 
 import uuid
