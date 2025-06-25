@@ -6,9 +6,8 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 
-
 from .utils import is_valid_phone, normalize_phone, validate_password
-from model import db, User,  TokenBlocklist
+from model import db, User, TokenBlocklist, PickupPoint
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ def get_profile():
 @profile_bp.route('/profile', methods=['PUT'])
 @jwt_required()
 def update_profile():
-    """Update user profile information"""
+    """Update user profile information including pickup point"""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
 
@@ -37,32 +36,53 @@ def update_profile():
         return jsonify({"msg": "User not found"}), 404
 
     data = request.get_json()
+    logger.info(f"Received data: {data}")  # Log the incoming data
 
     try:
         if 'name' in data:
             user.name = data['name'].strip()
+            logger.info(f"Updated name: {user.name}")
+
+        if 'email' in data:
+            user.email = data['email'].strip()
+            logger.info(f"Updated email: {user.email}")
 
         if 'phone' in data:
             phone = data['phone'].strip() if data['phone'] else None
             if phone and not is_valid_phone(phone):
+                logger.error("Invalid phone number format")
                 return jsonify({"msg": "Invalid phone number format"}), 400
             user.phone = normalize_phone(phone) if phone else None
+            logger.info(f"Updated phone: {user.phone}")
 
         if 'address' in data:
             user.address = data['address'].strip() if data['address'] else None
+            logger.info(f"Updated address: {user.address}")
 
-        if 'county' in data:
-            user.county = data['county'].strip() if data['county'] else None
+        if 'city' in data:
+            user.city = data['city'].strip() if data['city'] else None
+            logger.info(f"Updated city: {user.city}")
+
+        if 'pickup_point_id' in data:
+            pickup_point_id = data['pickup_point_id']
+            pickup_point = PickupPoint.query.get(pickup_point_id)
+            if not pickup_point:
+                logger.error("Pickup point not found")
+                return jsonify({"msg": "Pickup point not found"}), 404
+            user.pickup_point_id = pickup_point_id
+            logger.info(f"Updated pickup point ID: {user.pickup_point_id}")
 
         user.updated_at = datetime.utcnow()
         db.session.commit()
+        logger.info("Profile updated successfully")
 
         return jsonify({"msg": "Profile updated successfully", "user": user.as_dict()}), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Profile update error: {str(e)}")
+        logger.error(f"Profile update error: {str(e)}", exc_info=True)
         return jsonify({"msg": "Failed to update profile", "error": str(e)}), 500
+
 
 @profile_bp.route('/change-password', methods=['POST'])
 @jwt_required()
@@ -143,7 +163,7 @@ def logout_all_devices():
         db.session.rollback()
         logger.error(f"Logout all devices failed: {str(e)}")
         return jsonify({"msg": "Logout all failed", "error": str(e)}), 500
-    
+
 @profile_bp.route('/delete-account', methods=['DELETE'])
 @jwt_required()
 def delete_account():
