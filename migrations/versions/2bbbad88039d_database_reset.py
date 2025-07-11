@@ -1,8 +1,8 @@
-"""updates uuid
+"""database reset
 
-Revision ID: 1914ff7903fb
+Revision ID: 2bbbad88039d
 Revises: 
-Create Date: 2025-06-04 14:04:16.188008
+Create Date: 2025-07-11 07:56:02.920887
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '1914ff7903fb'
+revision = '2bbbad88039d'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -31,20 +31,36 @@ def upgrade():
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('location_details', sa.Text(), nullable=True),
     sa.Column('city', sa.String(length=255), nullable=True),
+    sa.Column('county', sa.String(length=255), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated', sa.DateTime(), nullable=False),
+    sa.Column('cost', sa.Float(), nullable=False),
+    sa.Column('phone_number', sa.String(length=20), nullable=True),
+    sa.Column('is_doorstep', sa.Boolean(), nullable=False),
+    sa.Column('delivery_method', sa.String(length=100), nullable=False),
+    sa.Column('contact_person', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('token_blocklist',
+    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('jti', sa.String(length=36), nullable=False),
+    sa.Column('user_id', sa.String(length=36), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('token_blocklist', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_token_blocklist_jti'), ['jti'], unique=False)
+
     op.create_table('users',
     sa.Column('id', sa.String(length=36), nullable=False),
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('password', sa.String(length=255), nullable=False),
-    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=True),
     sa.Column('role', sa.Enum('ADMIN', 'CUSTOMER', 'STAFF', name='userrole'), nullable=False),
     sa.Column('permissions', sa.Text(), nullable=True),
     sa.Column('address', sa.Text(), nullable=True),
-    sa.Column('city', sa.String(length=255), nullable=True),
+    sa.Column('county', sa.String(length=255), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('phone', sa.String(length=255), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
@@ -54,12 +70,12 @@ def upgrade():
     )
     op.create_table('orders',
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('user_id', sa.String(length=36), nullable=False),
+    sa.Column('user_id', sa.String(length=36), nullable=True),
     sa.Column('order_number', sa.String(length=255), nullable=False),
     sa.Column('status', sa.Enum('PENDING', 'CONFIRMED', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED', 'RETURNED', name='orderstatus'), nullable=False),
-    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.Column('customer_name', sa.String(length=255), nullable=False),
-    sa.Column('customer_phone', sa.String(length=255), nullable=False),
+    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=True),
+    sa.Column('customer_name', sa.String(length=255), nullable=True),
+    sa.Column('customer_phone', sa.String(length=255), nullable=True),
     sa.Column('delivery_address', sa.Text(), nullable=True),
     sa.Column('city', sa.String(length=255), nullable=True),
     sa.Column('pickup_point_id', sa.String(length=36), nullable=True),
@@ -97,6 +113,7 @@ def upgrade():
     sa.Column('unit_price', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('custom_images', sa.Boolean(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.Column('total_price', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -136,13 +153,22 @@ def upgrade():
     )
     op.create_table('custom_images',
     sa.Column('id', sa.String(length=36), nullable=False),
-    sa.Column('order_item_id', sa.String(length=36), nullable=False),
+    sa.Column('order_item_id', sa.String(length=36), nullable=True),
     sa.Column('product_id', sa.String(length=36), nullable=True),
+    sa.Column('user_id', sa.String(length=36), nullable=False),
     sa.Column('image_url', sa.Text(), nullable=False),
     sa.Column('image_name', sa.String(length=255), nullable=True),
+    sa.Column('cloudinary_public_id', sa.String(length=255), nullable=True),
     sa.Column('upload_date', sa.DateTime(), nullable=False),
+    sa.Column('is_temporary', sa.Boolean(), nullable=False),
+    sa.Column('approval_status', sa.Enum('PENDING', 'APPROVED', 'REJECTED', name='imageapprovalstatus'), nullable=False),
+    sa.Column('approved_by', sa.String(length=36), nullable=True),
+    sa.Column('approval_date', sa.DateTime(), nullable=True),
+    sa.Column('rejection_reason', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['approved_by'], ['users.id'], ),
     sa.ForeignKeyConstraint(['order_item_id'], ['order_items.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['products.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
@@ -157,6 +183,10 @@ def downgrade():
     op.drop_table('products')
     op.drop_table('orders')
     op.drop_table('users')
+    with op.batch_alter_table('token_blocklist', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_token_blocklist_jti'))
+
+    op.drop_table('token_blocklist')
     op.drop_table('pickup_points')
     op.drop_table('categories')
     # ### end Alembic commands ###
